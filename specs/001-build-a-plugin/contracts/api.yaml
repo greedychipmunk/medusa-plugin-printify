@@ -1,0 +1,561 @@
+openapi: 3.0.3
+info:
+  title: Medusa Printify Plugin API
+  description: API endpoints for Medusa Printify integration plugin
+  version: 1.0.0
+  contact:
+    name: Medusa Printify Plugin
+    url: https://github.com/your-org/medusa-plugin-printify
+
+servers:
+  - url: http://localhost:9000
+    description: Local development server
+  - url: https://your-store.medusa-commerce.com
+    description: Production server
+
+paths:
+  /admin/printify/config:
+    get:
+      summary: Get Printify configuration
+      description: Retrieve current Printify plugin configuration
+      tags:
+        - Admin - Configuration
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: Configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintifyConfigResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      summary: Create or update Printify configuration
+      description: Configure Printify API credentials and settings
+      tags:
+        - Admin - Configuration
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrintifyConfigRequest'
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintifyConfigResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/printify/products:
+    get:
+      summary: List Printify products
+      description: Retrieve paginated list of available Printify products
+      tags:
+        - Admin - Products
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: enabled
+          in: query
+          description: Filter by enablement status
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          description: Search products by title
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Products retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintifyProductsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/printify/products/{id}/enable:
+    post:
+      summary: Enable Printify product
+      description: Enable a Printify product for storefront display
+      tags:
+        - Admin - Products
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product enabled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintifyProductResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/printify/products/{id}/disable:
+    post:
+      summary: Disable Printify product
+      description: Disable a Printify product from storefront display
+      tags:
+        - Admin - Products
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product disabled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintifyProductResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/printify/products/bulk-enable:
+    post:
+      summary: Bulk enable products
+      description: Enable multiple Printify products at once
+      tags:
+        - Admin - Products
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkProductRequest'
+      responses:
+        '200':
+          description: Bulk operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/printify/products/bulk-disable:
+    post:
+      summary: Bulk disable products
+      description: Disable multiple Printify products at once
+      tags:
+        - Admin - Products
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkProductRequest'
+      responses:
+        '200':
+          description: Bulk operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/printify/sync:
+    post:
+      summary: Manual synchronization
+      description: Trigger manual synchronization with Printify
+      tags:
+        - Admin - Sync
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: Synchronization started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/printify/sync/logs:
+    get:
+      summary: Get synchronization logs
+      description: Retrieve paginated synchronization history
+      tags:
+        - Admin - Sync
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Sync logs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncLogsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /store/products:
+    get:
+      summary: Get storefront products (filtered)
+      description: Extended Medusa products endpoint with Printify filtering
+      tags:
+        - Store - Products
+      parameters:
+        - name: include_printify
+          in: query
+          description: Include only enabled Printify products
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Products retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreProductsResponse'
+
+  /webhooks/printify:
+    post:
+      summary: Printify webhook endpoint
+      description: Receive webhooks from Printify for real-time synchronization
+      tags:
+        - Webhooks
+      security:
+        - WebhookAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrintifyWebhookPayload'
+      responses:
+        '200':
+          description: Webhook processed successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    AdminAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Medusa admin authentication token
+    WebhookAuth:
+      type: apiKey
+      in: header
+      name: X-Printify-Signature
+      description: Printify webhook signature for verification
+
+  schemas:
+    PrintifyConfigRequest:
+      type: object
+      required:
+        - printify_api_key
+        - printify_shop_id
+      properties:
+        printify_api_key:
+          type: string
+          description: Printify API key
+        printify_shop_id:
+          type: string
+          description: Printify shop identifier
+        sync_enabled:
+          type: boolean
+          default: true
+        sync_frequency:
+          type: integer
+          minimum: 5
+          maximum: 1440
+          default: 60
+          description: Sync frequency in minutes
+
+    PrintifyConfigResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        store_id:
+          type: string
+        printify_shop_id:
+          type: string
+        sync_enabled:
+          type: boolean
+        sync_frequency:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PrintifyProductResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        printify_product_id:
+          type: string
+        medusa_product_id:
+          type: string
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        last_sync_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PrintifyProductsResponse:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrintifyProductResponse'
+        count:
+          type: integer
+        offset:
+          type: integer
+        limit:
+          type: integer
+
+    BulkProductRequest:
+      type: object
+      required:
+        - product_ids
+      properties:
+        product_ids:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 100
+
+    BulkOperationResponse:
+      type: object
+      properties:
+        success_count:
+          type: integer
+        failure_count:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id:
+                type: string
+              error:
+                type: string
+
+    SyncResponse:
+      type: object
+      properties:
+        sync_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [started, running, completed, failed]
+        message:
+          type: string
+
+    SyncLogsResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              sync_type:
+                type: string
+                enum: [manual, scheduled, webhook, bulk]
+              status:
+                type: string
+                enum: [success, failure, partial]
+              operation:
+                type: string
+                enum: [fetch, update, enable, disable]
+              changes_count:
+                type: integer
+              duration_ms:
+                type: integer
+              error_message:
+                type: string
+                nullable: true
+              created_at:
+                type: string
+                format: date-time
+        count:
+          type: integer
+        offset:
+          type: integer
+        limit:
+          type: integer
+
+    StoreProductsResponse:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            type: object
+            description: Standard Medusa product with Printify metadata
+        count:
+          type: integer
+        offset:
+          type: integer
+        limit:
+          type: integer
+
+    PrintifyWebhookPayload:
+      type: object
+      properties:
+        event:
+          type: string
+          enum: [product.created, product.updated, product.deleted]
+        data:
+          type: object
+          description: Printify product data
+        timestamp:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
