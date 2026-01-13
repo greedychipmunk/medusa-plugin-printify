@@ -1,5 +1,5 @@
-export { PrintifyConfigurationWidget } from './printify-configuration-widget';
-export { PrintifyProductManagementWidget } from './printify-product-management-widget';
+export { default as PrintifyConfigurationWidget } from './printify-configuration-widget';
+export { default as PrintifyProductManagementWidget } from './printify-product-management-widget';
 
 // Widget definitions for Medusa admin
 export const printifyWidgets = [

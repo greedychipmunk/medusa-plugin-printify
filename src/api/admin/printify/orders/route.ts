@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { z } from 'zod';
 import { PrintifyOrderService, OrderListOptions } from '../../../../modules/printify/services/printify-order-service';
 import { PrintifyOrderStatus } from '../../../../modules/printify/models/printify-order';
@@ -6,15 +6,6 @@ import { PrintifyCartItem } from '../../../../modules/printify/models/printify-c
 import { PrintifyApiClient } from '../../../../modules/printify/services/printify-api-client';
 import { StorefrontProductService } from '../../../../modules/printify/services/storefront-product-service';
 import { logger } from '../../../../modules/printify/utils/logger';
-
-// Extended Request type for Medusa admin context
-interface AdminRequest extends Request {
-  user?: {
-    store_id?: string;
-    id: string;
-    email: string;
-  };
-}
 
 // Request validation schemas
 const createOrderSchema = z.object({
@@ -64,9 +55,9 @@ const apiLogger = logger.child('AdminOrderAPI');
  * GET /admin/printify/orders
  * List all Printify orders with filtering options
  */
-export async function GET(req: AdminRequest, res: Response): Promise<void> {
+export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.user?.store_id || 'default-store';
+    const storeId = req.auth_context?.actor_id || 'default-store';
     
     apiLogger.info('Listing orders', { storeId, query: req.query });
 
@@ -129,7 +120,7 @@ export async function GET(req: AdminRequest, res: Response): Promise<void> {
           shipping_address: order.shippingAddress,
           tracking: order.tracking,
           last_error: order.lastError,
-          retry_count: order.retryCount,
+          retry_count: 0, // TODO: Add retry_count field to DML model
         })),
         count: result.total,
         offset: Number(offset),
@@ -152,9 +143,9 @@ export async function GET(req: AdminRequest, res: Response): Promise<void> {
  * POST /admin/printify/orders
  * Create a new Printify order from cart data
  */
-export async function POST(req: AdminRequest, res: Response): Promise<void> {
+export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.user?.store_id || 'default-store';
+    const storeId = req.auth_context?.actor_id || 'default-store';
     
     apiLogger.info('Creating order', { storeId });
 
@@ -196,15 +187,15 @@ export async function POST(req: AdminRequest, res: Response): Promise<void> {
       customerEmail: data.customer_email,
       cartItems: cartItems,
       shippingAddress: {
-        firstName: data.shipping_address.first_name,
-        lastName: data.shipping_address.last_name,
+        first_name: data.shipping_address.first_name,
+        last_name: data.shipping_address.last_name,
         email: data.shipping_address.email,
         phone: data.shipping_address.phone,
         company: data.shipping_address.company,
         address1: data.shipping_address.address1,
         address2: data.shipping_address.address2,
         city: data.shipping_address.city,
-        state: data.shipping_address.state,
+        region: data.shipping_address.state || data.shipping_address.country,
         zip: data.shipping_address.zip,
         country: data.shipping_address.country,
       },

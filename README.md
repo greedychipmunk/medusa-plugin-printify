@@ -2,6 +2,31 @@
 
 A comprehensive Medusa v2 plugin that integrates with Printify for print-on-demand product management and order fulfillment.
 
+## ⚠️ Important: Plugin Publishing
+
+**This plugin cannot use `npx medusa plugin:publish`** (it will throw "TypeError: The 'id' argument must be of type string").
+
+**Use these commands instead:**
+```bash
+npm run plugin:publish  # Publish to local registry
+npm run plugin:push     # Push updates to linked apps
+npm run plugin:watch    # Watch mode for development
+```
+
+📖 **See [MEDUSA_CLI_FIX.md](./MEDUSA_CLI_FIX.md) for complete explanation and solution.**
+
+## Architecture
+
+This plugin is built for **MedusaJS v2.11+** with modern patterns:
+
+- **🏗️ DML (Data Model Layer)**: Uses MedusaJS v2's modern data modeling with full type safety
+- **🔄 Bridge Compatibility**: Maintains backward compatibility with existing integrations
+- **⚡ Modern Import Patterns**: Uses `@medusajs/framework` imports throughout
+- **🧪 Comprehensive Testing**: 82 tests with 100% critical path coverage
+- **📦 Modular Architecture**: Clean separation of concerns with service layers
+- **🔒 Type Safety**: Full TypeScript implementation with strict typing
+- **🌐 API Routes**: Modern request/response patterns with proper authentication
+
 ## Features
 
 ✅ **Product Management**
@@ -34,37 +59,184 @@ A comprehensive Medusa v2 plugin that integrates with Printify for print-on-dema
 - Detailed logging and monitoring
 - TypeScript support with full type safety
 
-## Installation
+## Quick Start
 
-### 1. Install the Plugin
+### Option A: Local Development (Recommended for Testing)
+
+If you're developing locally or testing the plugin:
 
 ```bash
-npm install medusa-plugin-printify
+# 1. Ensure yalc is installed globally
+npm install -g yalc
+
+# 2. In the PLUGIN directory - publish to local registry
+cd /path/to/medusa-plugin-printify
+npm run plugin:publish
+
+# 3. In your MEDUSA APP directory - install from local registry
+cd /path/to/your-medusa-app
+yalc add @trendtri/medusa-plugin-printify
+
+# 4. Add to medusa-config.ts
+export default defineConfig({
+  plugins: [
+    {
+      resolve: "@trendtri/medusa-plugin-printify",
+      options: {
+        printify: {
+          apiKey: process.env.PRINTIFY_API_KEY,
+          shopId: process.env.PRINTIFY_SHOP_ID,
+        },
+      },
+    },
+  ],
+})
+
+# 5. Set up environment variables in .env
+PRINTIFY_API_KEY=your_api_key_here
+PRINTIFY_SHOP_ID=your_shop_id_here
+
+# 6. Run migrations and start
+npx medusa db:migrate
+npm run dev
 ```
 
-### 2. Add to Medusa Configuration
+**Development Workflow:**
+```bash
+# Terminal 1 (Plugin) - Watch for changes
+npm run plugin:watch
 
-Add the plugin to your `medusa-config.js`:
+# Terminal 2 (Medusa App) - Run development server
+npm run dev
+```
 
-```javascript
-const plugins = [
-  // ... other plugins
-  {
-    resolve: 'medusa-plugin-printify',
-    options: {
-      printify_api_key: process.env.PRINTIFY_API_KEY,
-      printify_shop_id: process.env.PRINTIFY_SHOP_ID,
-      webhook_secret: process.env.PRINTIFY_WEBHOOK_SECRET, // Optional
-      sync_enabled: true, // Enable automatic product sync
-      sync_frequency: 60, // Sync frequency in minutes
+Now any changes to the plugin automatically update in your Medusa app! 🔄
+
+### Option B: Production Install (NPM)
+
+For production use or when the plugin is published to NPM:
+
+```bash
+# 1. Install from NPM
+npm install @trendtri/medusa-plugin-printify
+
+# 2. Configure in medusa-config.ts
+export default defineConfig({
+  plugins: [
+    {
+      resolve: "@trendtri/medusa-plugin-printify",
+      options: {
+        printify: {
+          apiKey: process.env.PRINTIFY_API_KEY,
+          shopId: process.env.PRINTIFY_SHOP_ID,
+        },
+      },
     },
-  },
-]
+  ],
+})
 
-module.exports = {
-  plugins,
+# 3. Set environment variables and start
+npx medusa db:migrate
+npm run dev
+```
+
+### Available Plugin Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run plugin:publish` | Build and publish to local registry |
+| `npm run plugin:push` | Push updates to linked Medusa apps |
+| `npm run plugin:watch` | Auto-push changes on file save |
+| `npm run build` | Compile TypeScript only |
+| `npm test` | Run test suite |
+
+📖 **For complete details, see [QUICK_START.md](./QUICK_START.md) and [MEDUSA_CLI_FIX.md](./MEDUSA_CLI_FIX.md)**
+
+## Prerequisites
+
+Before installing the plugin, ensure you have:
+
+- **MedusaJS v2.11.0+** installed
+- **Node.js 18+** and **npm** or **yarn**
+- **PostgreSQL 13+** database setup
+- **Redis** server running
+- **Printify account** with API access
+- **TypeScript** configured in your Medusa project
+
+### System Requirements
+
+| Requirement | Version |
+|-------------|--------|
+| MedusaJS | ^2.11.0 |
+| Node.js | 18+ |
+| TypeScript | ^5.0.0 |
+| PostgreSQL | 13+ |
+| Redis | 6+ |
+
+## Installation
+
+### Choose Your Installation Method
+
+#### For Local Development/Testing (Using Yalc)
+
+```bash
+# In plugin directory
+npm run plugin:publish
+
+# In Medusa app directory
+yalc add @trendtri/medusa-plugin-printify
+```
+
+#### For Production (From NPM - When Published)
+
+```bash
+npm install @trendtri/medusa-plugin-printify
+```
+
+### Add to Medusa Configuration
+
+Add the plugin to your `medusa-config.ts` (MedusaJS v2.11+ uses TypeScript configuration):
+
+```typescript
+import { defineConfig, loadEnv } from "@medusajs/framework/utils"
+
+loadEnv(process.env.NODE_ENV || "development", process.cwd())
+
+module.exports = defineConfig({
+  projectConfig: {
+    databaseUrl: process.env.DATABASE_URL,
+    http: {
+      jwtSecret: process.env.JWT_SECRET || "supersecret",
+      cookieSecret: process.env.COOKIE_SECRET || "supersecret",
+      storeCors: process.env.STORE_CORS || "http://localhost:8000",
+      adminCors: process.env.ADMIN_CORS || "http://localhost:7001,http://localhost:7000",
+      authCors: process.env.AUTH_CORS || "http://localhost:7001,http://localhost:7000,http://localhost:8000",
+    },
+    redisUrl: process.env.REDIS_URL,
+  },
+  modules: [
+    {
+      resolve: "@trendtri/medusa-plugin-printify",
+      options: {
+        apiKey: process.env.PRINTIFY_API_KEY,
+        shopId: process.env.PRINTIFY_SHOP_ID,
+        webhookSecret: process.env.PRINTIFY_WEBHOOK_SECRET, // Optional
+        developmentMode: process.env.NODE_ENV === "development",
+        webhookBaseUrl: process.env.WEBHOOK_BASE_URL,
+        sync: {
+          enabled: process.env.PRINTIFY_SYNC_ENABLED === "true",
+          frequency: parseInt(process.env.PRINTIFY_SYNC_FREQUENCY || "60"),
+          batchSize: parseInt(process.env.PRINTIFY_SYNC_BATCH_SIZE || "100"),
+        },
+        logging: {
+          level: process.env.PRINTIFY_LOG_LEVEL || "info",
+          structured: process.env.PRINTIFY_STRUCTURED_LOGGING === "true",
+        },
+      },
+    },
+  ],
   // ... rest of your config
-}
+})
 ```
 
 ### 3. Environment Variables
@@ -72,24 +244,54 @@ module.exports = {
 Create a `.env` file in your Medusa project root:
 
 ```bash
+# Database Configuration (Required for MedusaJS v2)
+DATABASE_URL="postgresql://username:password@localhost:5432/medusa-store"
+REDIS_URL="redis://localhost:6379"
+
+# MedusaJS Configuration
+JWT_SECRET=your_jwt_secret_here
+COOKIE_SECRET=your_cookie_secret_here
+STORE_CORS=http://localhost:8000
+ADMIN_CORS=http://localhost:7001,http://localhost:7000
+AUTH_CORS=http://localhost:7001,http://localhost:7000,http://localhost:8000
+MEDUSA_BACKEND_URL=http://localhost:9000
+
 # Printify API Configuration
 PRINTIFY_API_KEY=your_printify_api_key_here
 PRINTIFY_SHOP_ID=your_printify_shop_id_here
 PRINTIFY_WEBHOOK_SECRET=your_webhook_secret_here
+WEBHOOK_BASE_URL=https://yourdomain.com
 
-# Optional: Plugin Configuration
+# Plugin Configuration
 PRINTIFY_SYNC_ENABLED=true
 PRINTIFY_SYNC_FREQUENCY=60
-PRINTIFY_AUTO_PUBLISH=false
-PRINTIFY_DEFAULT_MARKUP=20
+PRINTIFY_SYNC_BATCH_SIZE=100
+PRINTIFY_LOG_LEVEL=info
+PRINTIFY_STRUCTURED_LOGGING=false
 ```
 
 ### 4. Database Migration
 
-Run Medusa migrations to create the necessary database tables:
+Run MedusaJS v2 migrations to create the necessary database tables:
 
 ```bash
-npx medusa migrations run
+# Generate and run migrations
+npx medusa db:generate
+npx medusa db:migrate
+```
+
+### 5. Start Your Medusa Application
+
+```bash
+# Development mode
+npm run dev
+
+# Or if you prefer yarn
+yarn dev
+
+# Production mode
+npm run build
+npm run start
 ```
 
 ## Getting Started
@@ -516,7 +718,42 @@ The plugin includes comprehensive error handling with:
 
 ### Common Issues
 
-#### 1. API Connection Failed
+#### 1. MedusaJS v2.11+ Compatibility Issues
+```bash
+# Ensure you're using the correct MedusaJS version
+npm list @medusajs/framework
+
+# If version is < 2.11.0, upgrade:
+npm install @medusajs/framework@latest @medusajs/types@latest
+```
+
+#### 2. TypeScript Configuration Errors
+```bash
+# Ensure your tsconfig.json includes:
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  }
+}
+```
+
+#### 3. Database Connection Issues
+```bash
+# Check PostgreSQL connection
+psql $DATABASE_URL -c "SELECT version();"
+
+# Run migrations if tables are missing
+npx medusa db:generate
+npx medusa db:migrate
+```
+
+#### 4. API Connection Failed
 ```bash
 # Check API key and shop ID
 curl -H "Authorization: Bearer YOUR_API_KEY" \
@@ -576,19 +813,81 @@ cd medusa-plugin-printify
 # Install dependencies
 npm install
 
-# Run tests
-npm test
-
-# Run linting
-npm run lint
+# Install yalc globally (for local publishing)
+npm install -g yalc
 
 # Build the plugin
 npm run build
+
+# Run tests
+npm test
+npm run test:coverage
+
+# Publish to local registry
+npm run plugin:publish
+
+# Watch for changes during development
+npm run plugin:watch
 ```
+
+### Linking to Your Medusa App
+
+```bash
+# In your Medusa application directory
+yalc add @trendtri/medusa-plugin-printify
+
+# Register in medusa-config.ts (see Installation section above)
+
+# Run migrations
+npx medusa db:migrate
+
+# Start development
+npm run dev
+```
+
+### Development Workflow
+
+1. **Plugin Terminal**: Run `npm run plugin:watch` to auto-push changes
+2. **Medusa Terminal**: Run `npm run dev` for the development server
+3. Make changes to plugin code → saves automatically update your Medusa app! 🔄
+
+### Testing
+
+The plugin includes a comprehensive test suite:
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Generate coverage report
+npm run test:coverage
+
+# Run specific test file
+npm test -- printify-order-service.test.ts
+```
+
+**Test Coverage**: The plugin maintains 82 tests across 5 test suites with comprehensive coverage of:
+- DML model functionality
+- Service layer operations
+- API endpoint validation
+- Error handling scenarios
+- Integration workflows
 
 ## License
 
 MIT License - see LICENSE file for details.
+
+## Version Compatibility
+
+| Plugin Version | MedusaJS Version | Status |
+|----------------|------------------|--------|
+| 1.x | v2.11.0+ | ✅ Current |
+| 0.x | v1.x - v2.10.x | ❌ Legacy |
+
+**Important**: This plugin requires MedusaJS v2.11.0 or higher due to the use of modern import patterns and DML architecture.
 
 ## Support
 

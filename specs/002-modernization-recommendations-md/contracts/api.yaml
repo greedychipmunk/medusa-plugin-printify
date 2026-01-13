@@ -1,0 +1,657 @@
+openapi: 3.0.3
+info:
+  title: MedusaJS Printify Plugin API
+  description: Modernized admin API for managing Printify integration in MedusaJS
+  version: 2.0.0
+  contact:
+    name: MedusaJS Printify Plugin
+    url: https://github.com/medusajs/medusa-plugin-printify
+
+servers:
+  - url: /admin/printify
+    description: Admin API routes under MedusaJS admin context
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: MedusaJS admin authentication token
+
+  schemas:
+    Error:
+      type: object
+      required: [type, message]
+      properties:
+        type:
+          type: string
+          enum: [invalid_data, not_found, duplicate_error, not_allowed, unknown_error]
+        message:
+          type: string
+        code:
+          type: string
+          
+    PrintifyConfiguration:
+      type: object
+      required: [id, store_id, printify_api_key, printify_shop_id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        store_id:
+          type: string
+        printify_api_key:
+          type: string
+          description: Encrypted Printify API key
+        printify_shop_id:
+          type: string
+        webhook_secret:
+          type: string
+          nullable: true
+        sync_enabled:
+          type: boolean
+          default: true
+        sync_frequency:
+          type: integer
+          minimum: 10
+          maximum: 1440
+          default: 60
+          description: Sync frequency in minutes
+        batch_size:
+          type: integer
+          minimum: 10
+          maximum: 500
+          default: 100
+        development_mode:
+          type: boolean
+          default: false
+        webhook_base_url:
+          type: string
+          nullable: true
+        logging_level:
+          type: string
+          enum: [error, warn, info, debug]
+          default: info
+        structured_logging:
+          type: boolean
+          default: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PrintifyProduct:
+      type: object
+      required: [id, printify_product_id, title, enabled]
+      properties:
+        id:
+          type: string
+          format: uuid
+        printify_product_id:
+          type: string
+        medusa_product_id:
+          type: string
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+        sync_status:
+          type: string
+          enum: [pending, synced, failed]
+        printify_data:
+          type: object
+          description: Raw Printify API response
+        medusa_data:
+          type: object
+          nullable: true
+          description: Transformed Medusa product data
+        last_sync_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_sync_error:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrintifyProductVariant'
+
+    PrintifyProductVariant:
+      type: object
+      required: [id, printify_variant_id, title, price]
+      properties:
+        id:
+          type: string
+          format: uuid
+        printify_variant_id:
+          type: string
+        medusa_variant_id:
+          type: string
+          nullable: true
+        sku:
+          type: string
+          nullable: true
+        title:
+          type: string
+        price:
+          type: number
+          format: decimal
+        cost:
+          type: number
+          format: decimal
+          nullable: true
+        grams:
+          type: number
+          nullable: true
+        enabled:
+          type: boolean
+        variant_data:
+          type: object
+          description: Printify variant details (size, color, etc.)
+
+    PrintifyOrder:
+      type: object
+      required: [id, medusa_order_id, external_id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        printify_order_id:
+          type: string
+          nullable: true
+        medusa_order_id:
+          type: string
+        external_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, submitted, shipped, delivered, failed]
+        line_items:
+          type: array
+          items:
+            type: object
+        shipping_info:
+          type: object
+        printify_response:
+          type: object
+          nullable: true
+        tracking_number:
+          type: string
+          nullable: true
+        tracking_url:
+          type: string
+          nullable: true
+        submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+        shipped_at:
+          type: string
+          format: date-time
+          nullable: true
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        retry_count:
+          type: integer
+
+    SyncStats:
+      type: object
+      properties:
+        total_products:
+          type: integer
+        enabled_products:
+          type: integer
+        pending_sync:
+          type: integer
+        last_sync_at:
+          type: string
+          format: date-time
+          nullable: true
+        sync_in_progress:
+          type: boolean
+
+    OrderStats:
+      type: object
+      properties:
+        total_orders:
+          type: integer
+        pending_orders:
+          type: integer
+        shipped_orders:
+          type: integer
+        failed_orders:
+          type: integer
+        orders_last_30_days:
+          type: integer
+
+paths:
+  /config:
+    get:
+      summary: Get Printify configuration
+      operationId: getConfiguration
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configuration:
+                    $ref: '#/components/schemas/PrintifyConfiguration'
+        '404':
+          description: Configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+    post:
+      summary: Create or update Printify configuration
+      operationId: createOrUpdateConfiguration
+      tags: [Configuration]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [printify_api_key, printify_shop_id]
+              properties:
+                printify_api_key:
+                  type: string
+                printify_shop_id:
+                  type: string
+                webhook_secret:
+                  type: string
+                sync_enabled:
+                  type: boolean
+                sync_frequency:
+                  type: integer
+                  minimum: 10
+                  maximum: 1440
+                batch_size:
+                  type: integer
+                  minimum: 10
+                  maximum: 500
+                development_mode:
+                  type: boolean
+                webhook_base_url:
+                  type: string
+                logging_level:
+                  type: string
+                  enum: [error, warn, info, debug]
+                structured_logging:
+                  type: boolean
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configuration:
+                    $ref: '#/components/schemas/PrintifyConfiguration'
+        '400':
+          description: Invalid configuration data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /products:
+    get:
+      summary: List Printify products
+      operationId: listProducts
+      tags: [Products]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+        - name: sync_status
+          in: query
+          schema:
+            type: string
+            enum: [pending, synced, failed]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Products retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PrintifyProduct'
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+
+    post:
+      summary: Sync products from Printify
+      operationId: syncProducts
+      tags: [Products]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  default: false
+                batch_size:
+                  type: integer
+                  minimum: 10
+                  maximum: 500
+      responses:
+        '202':
+          description: Sync started successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  sync_id:
+                    type: string
+
+  /products/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          
+    get:
+      summary: Get product details
+      operationId: getProduct
+      tags: [Products]
+      responses:
+        '200':
+          description: Product retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product:
+                    $ref: '#/components/schemas/PrintifyProduct'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /products/{id}/enable:
+    post:
+      summary: Enable product for store
+      operationId: enableProduct
+      tags: [Products]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Product enabled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product:
+                    $ref: '#/components/schemas/PrintifyProduct'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /products/{id}/disable:
+    post:
+      summary: Disable product for store
+      operationId: disableProduct
+      tags: [Products]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Product disabled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product:
+                    $ref: '#/components/schemas/PrintifyProduct'
+
+  /products/bulk-operations:
+    post:
+      summary: Perform bulk operations on products
+      operationId: bulkOperations
+      tags: [Products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operation, product_ids]
+              properties:
+                operation:
+                  type: string
+                  enum: [enable, disable, sync, delete]
+                product_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                reason:
+                  type: string
+      responses:
+        '202':
+          description: Bulk operation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  operation_id:
+                    type: string
+                  affected_products:
+                    type: integer
+
+  /orders:
+    get:
+      summary: List Printify orders
+      operationId: listOrders
+      tags: [Orders]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, submitted, shipped, delivered, failed]
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Orders retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PrintifyOrder'
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+
+  /orders/{id}:
+    get:
+      summary: Get order details
+      operationId: getOrder
+      tags: [Orders]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Order retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order:
+                    $ref: '#/components/schemas/PrintifyOrder'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/stats:
+    get:
+      summary: Get order statistics
+      operationId: getOrderStats
+      tags: [Orders]
+      responses:
+        '200':
+          description: Order statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stats:
+                    $ref: '#/components/schemas/OrderStats'
+
+tags:
+  - name: Configuration
+    description: Printify configuration management
+  - name: Products
+    description: Product synchronization and management
+  - name: Orders
+    description: Order processing and tracking

@@ -6,7 +6,9 @@
  */
 
 import { PrintifyOrderService as BaseOrderService, CreateOrderRequest, OrderStatusUpdate, OrderListOptions } from './printify-order-service';
-import { PrintifyOrder } from '../models/printify-order';
+import PrintifyOrder from '../models/printify-order';
+import { PrintifyOrderBridge } from '../utils/dml-bridge';
+import { PrintifyOrderType as PrintifyOrderTypeTemp } from '../types';
 import { OrderErrorHandler, OrderProcessingError, OrderErrorType } from '../utils/order-error-handling';
 import { logger } from '../utils/logger';
 
@@ -22,7 +24,7 @@ export class EnhancedPrintifyOrderService extends BaseOrderService {
   /**
    * Create order with enhanced error handling
    */
-  async createOrder(request: CreateOrderRequest): Promise<PrintifyOrder> {
+  async createOrder(request: CreateOrderRequest): Promise<PrintifyOrderBridge> {
     const context = this.errorHandler.createContext('createOrder', undefined, {
       medusaOrderId: request.medusaOrderId,
       itemCount: request.cartItems.length,
@@ -76,7 +78,7 @@ export class EnhancedPrintifyOrderService extends BaseOrderService {
   /**
    * Submit order with enhanced error handling and retries
    */
-  async submitOrder(orderId: string): Promise<PrintifyOrder> {
+  async submitOrder(orderId: string): Promise<PrintifyOrderBridge> {
     const context = this.errorHandler.createContext('submitOrder', orderId);
 
     return this.errorHandler.handleError(
@@ -129,7 +131,7 @@ export class EnhancedPrintifyOrderService extends BaseOrderService {
   /**
    * Sync order status with enhanced error handling
    */
-  async syncOrderStatus(orderId: string): Promise<PrintifyOrder> {
+  async syncOrderStatus(orderId: string): Promise<PrintifyOrderBridge> {
     const context = this.errorHandler.createContext('syncOrderStatus', orderId);
 
     return this.errorHandler.handleError(
@@ -175,7 +177,7 @@ export class EnhancedPrintifyOrderService extends BaseOrderService {
   /**
    * Cancel order with enhanced error handling
    */
-  async cancelOrder(orderId: string, reason: string): Promise<PrintifyOrder> {
+  async cancelOrder(orderId: string, reason: string): Promise<PrintifyOrderBridge> {
     const context = this.errorHandler.createContext('cancelOrder', orderId, { reason });
 
     return this.errorHandler.handleError(
@@ -221,7 +223,7 @@ export class EnhancedPrintifyOrderService extends BaseOrderService {
   /**
    * Update order status with enhanced error handling
    */
-  async updateOrderStatus(orderId: string, update: OrderStatusUpdate): Promise<PrintifyOrder> {
+  async updateOrderStatus(orderId: string, update: OrderStatusUpdate): Promise<PrintifyOrderBridge> {
     const context = this.errorHandler.createContext('updateOrderStatus', orderId, {
       newStatus: update.status,
       note: update.note,
@@ -310,7 +312,7 @@ export class EnhancedPrintifyOrderService extends BaseOrderService {
   /**
    * Get order by ID with enhanced error handling
    */
-  getOrder(orderId: string): PrintifyOrder {
+  getOrder(orderId: string): PrintifyOrderBridge {
     const context = this.errorHandler.createContext('getOrder', orderId);
 
     try {

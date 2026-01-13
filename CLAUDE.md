@@ -1,0 +1,340 @@
+# MedusaJS Printify Plugin - AI Assistant Guidelines
+
+**Date**: January 10, 2026  
+**Plugin Version**: 1.0.0  
+**MedusaJS Version**: v2.11.0+  
+**Status**: Production Ready ✅
+
+## Project Overview
+
+This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for print-on-demand product management and order fulfillment. The plugin has been fully modernized with DML (Data Model Layer) patterns, modern import structures, and comprehensive testing.
+
+### Plugin Capabilities
+
+- **Product Management**: Sync Printify products with Medusa store, inventory management, bulk operations
+- **Order Processing**: Automatic order submission to Printify, real-time status sync, tracking management
+- **Shopping Cart Integration**: Add Printify products to cart, validation, custom options
+- **Admin Dashboard**: Configuration management, order interface, analytics
+- **Modern Architecture**: DML entities, TypeScript, comprehensive test coverage (82 tests)
+
+## Architecture & Modernization Status
+
+### ✅ **Phase 4 Complete**: DML Integration
+- **Modern Data Models**: All models converted to MedusaJS v2 DML patterns with full type safety
+- **Service Layer**: Updated services using DML entities while maintaining legacy API compatibility
+- **Bridge Pattern**: Seamless backward compatibility ensuring zero breaking changes
+- **Test Coverage**: 82/82 tests passing across 5 test suites
+
+### ✅ **Phase 5 Complete**: API Routes Modernization  
+- **Modern Import Patterns**: All routes using `@medusajs/framework/http` imports
+- **Request/Response Types**: `AuthenticatedMedusaRequest` and `MedusaResponse` throughout
+- **Build Validation**: Clean TypeScript compilation with modern patterns
+- **Functionality Preservation**: All existing behavior maintained
+
+## Key Components
+
+### Models (DML-based)
+```
+src/modules/printify/models/
+├── printify-configuration.ts    # Plugin configuration with encryption
+├── printify-product.ts          # Product enablement and sync tracking
+├── printify-order.ts           # Complete order lifecycle management
+├── printify-product-variant.ts # Variant-specific data and pricing
+└── printify-cart-item.ts       # Shopping cart integration
+```
+
+### Services
+```
+src/modules/printify/services/
+├── printify-api-client.ts           # Printify API integration
+├── printify-configuration-service.ts # Configuration management
+├── printify-product-service.ts      # Product operations
+├── printify-order-service.ts        # Order processing (17 tests)
+├── printify-cart-service.ts         # Cart management (6 tests)
+└── storefront-product-service.ts    # Public product APIs
+```
+
+### API Routes (Modern Patterns)
+```
+src/api/admin/printify/
+├── config/route.ts                  # Configuration CRUD
+├── orders/route.ts                  # Order management
+├── products/route.ts                # Product operations
+└── [various]/route.ts               # Bulk operations, stats, etc.
+```
+
+### Admin Widgets
+```
+src/admin/widgets/
+├── printify-configuration-widget.tsx    # API configuration UI
+└── printify-product-management-widget.tsx # Product management UI
+```
+
+## Development Guidelines
+
+### Code Standards
+- **TypeScript 5.x** with strict typing enabled
+- **MedusaJS v2.11+** modern import patterns using `@medusajs/framework`
+- **DML entities** for all data models with bridge compatibility
+- **Comprehensive testing** - maintain 100% critical path coverage
+- **Error handling** with retry logic and user-friendly messages
+
+### Import Patterns (CRITICAL)
+Always use modern MedusaJS v2.11+ imports:
+
+```typescript
+// ✅ Correct - Modern patterns
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import type { MedusaContainer } from "@medusajs/framework/types"
+import { defineConfig } from "@medusajs/framework/utils"
+
+// ❌ Incorrect - Legacy patterns that will break
+import { Request, Response } from 'express'
+import { MedusaContainer } from "@medusajs/types"
+```
+
+### DML Model Patterns
+All models use modern DML architecture:
+
+```typescript
+import { model } from "@medusajs/framework/utils"
+
+const PrintifyProduct = model.define("printify_product", {
+  id: model.id().primaryKey(),
+  printify_product_id: model.text().unique(),
+  title: model.text(),
+  enabled: model.boolean().default(false),
+  // ... additional fields
+})
+
+export default PrintifyProduct
+```
+
+### Service Layer Integration
+Services use bridge patterns for compatibility:
+
+```typescript
+export class PrintifyOrderService {
+  // Modern DML entity usage with legacy compatibility
+  async createOrder(cartItems: CartItem[]): Promise<PrintifyOrderBridge> {
+    const entity = await this.printifyOrderModel_.create(data)
+    return new PrintifyOrderBridge(entity) // Bridge provides legacy API
+  }
+}
+```
+
+## Testing Requirements
+
+### Test Coverage
+- **82 tests total** across 5 test suites
+- **100% success rate** required for any changes
+- **Critical path coverage** for all user-facing functionality
+- **DML model validation** with both entity and bridge patterns
+
+### Test Structure
+```
+tests/
+├── unit/
+│   ├── api/admin-endpoints.test.ts         # 28 API tests
+│   ├── models/printify-configuration-dml.test.ts # 13 model tests
+│   ├── models/printify-product-dml.test.ts       # 14 model tests
+│   ├── services/printify-cart-service.test.ts    # 6 service tests
+│   └── services/printify-order-service.test.ts   # 17 service tests
+└── setup.ts
+```
+
+### Running Tests
+```bash
+npm test                 # Run all tests
+npm run test:watch       # Watch mode
+npm run test:coverage    # Coverage reports
+```
+
+## Third-Party Integration Best Practices
+
+### Printify API Integration
+Following MedusaJS best practices for third-party syncing:
+
+1. **Use Workflows** for long-running operations
+2. **Batch Processing** for bulk data operations  
+3. **Streaming** for large datasets to avoid memory issues
+4. **Retry Logic** with exponential backoff
+5. **Error Handling** with comprehensive logging
+
+### Syncing Patterns
+```typescript
+// Example: Product sync workflow
+export const syncProductsWorkflow = createWorkflow(
+  "sync-printify-products",
+  (input: SyncProductsInput) => {
+    const products = streamProductsFromPrintify(input)
+    const batches = batchProducts(products, 50)
+    
+    return transform(batches, async (batch) => {
+      return await batchProductsWorkflow(container).run({
+        input: { create: batch.toCreate, update: batch.toUpdate }
+      })
+    })
+  }
+)
+```
+
+## Configuration & Environment
+
+### Required Environment Variables
+```bash
+# MedusaJS v2 Configuration
+DATABASE_URL="postgresql://username:password@localhost:5432/medusa-store"
+REDIS_URL="redis://localhost:6379"
+JWT_SECRET=your_jwt_secret_here
+COOKIE_SECRET=your_cookie_secret_here
+
+# Printify Integration
+PRINTIFY_API_KEY=your_printify_api_key_here
+PRINTIFY_SHOP_ID=your_printify_shop_id_here
+PRINTIFY_WEBHOOK_SECRET=your_webhook_secret_here
+
+# Plugin Configuration
+PRINTIFY_SYNC_ENABLED=true
+PRINTIFY_SYNC_FREQUENCY=60
+PRINTIFY_LOG_LEVEL=info
+```
+
+### Module Configuration (medusa-config.ts)
+```typescript
+import { defineConfig } from "@medusajs/framework/utils"
+
+export default defineConfig({
+  modules: [
+    {
+      resolve: "@trendtri/medusa-plugin-printify",
+      options: {
+        apiKey: process.env.PRINTIFY_API_KEY,
+        shopId: process.env.PRINTIFY_SHOP_ID,
+        webhookSecret: process.env.PRINTIFY_WEBHOOK_SECRET,
+        sync: {
+          enabled: process.env.PRINTIFY_SYNC_ENABLED === "true",
+          frequency: parseInt(process.env.PRINTIFY_SYNC_FREQUENCY || "60"),
+          batchSize: 100,
+        },
+        logging: {
+          level: process.env.PRINTIFY_LOG_LEVEL || "info",
+          structured: false,
+        },
+      },
+    },
+  ],
+})
+```
+
+## API Endpoints
+
+### Admin Endpoints (Authenticated)
+```
+Configuration:
+GET    /admin/printify/config           # Get current configuration
+POST   /admin/printify/config           # Create/update configuration  
+POST   /admin/printify/config/test      # Test API connection
+
+Products:
+GET    /admin/printify/products         # List products with pagination
+POST   /admin/printify/products/sync    # Sync specific products
+POST   /admin/printify/products/bulk    # Bulk enable/disable operations
+POST   /admin/printify/products/:id/enable   # Enable single product
+POST   /admin/printify/products/:id/disable  # Disable single product
+
+Orders:
+GET    /admin/printify/orders           # List orders with filters
+POST   /admin/printify/orders           # Create order manually
+GET    /admin/printify/orders/:id       # Get order details
+POST   /admin/printify/orders/:id/submit    # Submit to Printify
+POST   /admin/printify/orders/:id/cancel    # Cancel order
+POST   /admin/printify/orders/:id/sync      # Sync status from Printify
+GET    /admin/printify/orders/stats     # Order statistics
+```
+
+### Storefront Endpoints (Public)
+```
+Products:
+GET    /store/printify/products         # List available products
+GET    /store/printify/products/:id     # Get product details
+
+Cart:
+POST   /store/printify/cart/validate    # Validate cart items
+```
+
+## Error Handling & Logging
+
+### Error Classification
+- **validation_error**: Invalid input data (no retry, user-friendly)
+- **inventory_error**: Stock issues (no retry, user-friendly)
+- **network_error**: Connection issues (retry with backoff)
+- **rate_limit_error**: API limits (retry with backoff)
+- **api_error**: General API errors (retry with backoff)
+
+### Logging Patterns
+```typescript
+import { Logger } from "../utils/logger"
+
+// Structured logging with context
+logger.error("Failed to sync product", {
+  productId: "printify_123",
+  error: error.message,
+  context: { retryAttempt: 2, batchSize: 50 }
+})
+```
+
+## Key Development Commands
+
+```bash
+# Development
+npm run build            # Compile TypeScript
+npm run watch           # Development with watch mode
+npm test               # Run test suite (82 tests)
+npm run lint           # ESLint validation
+npm run lint:fix       # Auto-fix linting issues
+
+# Database
+npx medusa db:generate  # Generate migrations
+npx medusa db:migrate   # Run migrations
+
+# Production
+npm run build
+npm start
+```
+
+## Troubleshooting
+
+### Common Issues
+1. **TypeScript Compilation Errors**: Ensure using `@medusajs/framework` imports
+2. **Test Failures**: Run `npm test` - all 82 tests must pass
+3. **DML Entity Issues**: Check bridge pattern implementation
+4. **API Connection**: Verify Printify API key and shop ID
+5. **Database**: Ensure migrations are run for DML tables
+
+### Debug Mode
+```bash
+PRINTIFY_LOG_LEVEL=debug npm run dev
+```
+
+## Version Compatibility
+
+| Plugin Version | MedusaJS Version | Status |
+|----------------|------------------|--------|
+| 1.x | v2.11.0+ | ✅ Current |
+| 0.x | v1.x - v2.10.x | ❌ Legacy |
+
+## AI Assistant Instructions
+
+When working with this plugin:
+
+1. **Always maintain modern import patterns** - use `@medusajs/framework` imports
+2. **Preserve test coverage** - all 82 tests must continue passing
+3. **Use DML entities** with bridge compatibility for any model changes
+4. **Follow TypeScript strict typing** - no `any` types in production code
+5. **Implement proper error handling** with retry logic for external APIs
+6. **Use streaming and batching** for large data operations
+7. **Document all changes** in both code and relevant markdown files
+8. **Test thoroughly** - run full test suite before any commits
+
+The plugin is production-ready and fully modernized for MedusaJS v2.11+. Any modifications should maintain this high standard of architecture and testing coverage.

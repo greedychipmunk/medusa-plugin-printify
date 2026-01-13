@@ -8,6 +8,12 @@ lerna-debug.log*
 
 medusa-llms.txt
 
+# Implementation backups
+*.backup/
+src.backup/
+tests.backup/
+docs.backup/
+
 # Runtime data
 pids
 *.pid
