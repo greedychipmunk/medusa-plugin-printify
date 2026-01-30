@@ -1,22 +1,10 @@
-import { Request, Response } from 'express';
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { z } from 'zod';
 import { PrintifyOrderService } from '../../../../../modules/printify/services/printify-order-service';
 import { PrintifyOrderStatus } from '../../../../../modules/printify/models/printify-order';
 import { PrintifyApiClient } from '../../../../../modules/printify/services/printify-api-client';
 import { StorefrontProductService } from '../../../../../modules/printify/services/storefront-product-service';
 import { logger } from '../../../../../modules/printify/utils/logger';
-
-// Extended Request type for Medusa admin context
-interface AdminRequest extends Request {
-  user?: {
-    store_id?: string;
-    id: string;
-    email: string;
-  };
-  params: {
-    id: string;
-  };
-}
 
 // Request validation schemas
 const updateOrderSchema = z.object({
@@ -44,12 +32,19 @@ const apiLogger = logger.child('AdminOrderDetailAPI');
  * GET /admin/printify/orders/:id
  * Get details of a specific Printify order
  */
-export async function GET(req: AdminRequest, res: Response): Promise<void> {
+export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.user?.store_id || 'default-store';
+    const storeId = req.auth_context?.actor_id || 'default-store';
     const orderId = req.params.id;
-    
-    apiLogger.info('Getting order details', { storeId, orderId });
+        if (!orderId) {
+      res.status(400).json({
+        success: false,
+        error: 'Order ID is required',
+        message: 'Order ID parameter is missing',
+      });
+      return;
+    }
+        apiLogger.info('Getting order details', { storeId, orderId });
 
     const orderService = getOrderService();
     const order = await orderService.getOrder(orderId);
@@ -73,7 +68,7 @@ export async function GET(req: AdminRequest, res: Response): Promise<void> {
           status: order.status,
           customer_id: order.customerId,
           customer_email: order.customerEmail,
-          items: order.items.map((item: any) => ({
+          items: order.items?.map((item: any) => ({
             product_id: item.productId,
             variant_id: item.variantId,
             printify_product_id: item.printifyProductId,
@@ -97,7 +92,7 @@ export async function GET(req: AdminRequest, res: Response): Promise<void> {
           updated_at: order.updatedAt,
           submitted_at: order.submittedAt,
           last_error: order.lastError,
-          retry_count: order.retryCount,
+          retry_count: 0, // TODO: Add retry_count field to DML model
         },
       },
     });
@@ -116,12 +111,19 @@ export async function GET(req: AdminRequest, res: Response): Promise<void> {
  * PATCH /admin/printify/orders/:id
  * Update order status or notes
  */
-export async function PATCH(req: AdminRequest, res: Response): Promise<void> {
+export async function PATCH(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.user?.store_id || 'default-store';
+    const storeId = req.auth_context?.actor_id || 'default-store';
     const orderId = req.params.id;
-    
-    apiLogger.info('Updating order', { storeId, orderId });
+        if (!orderId) {
+      res.status(400).json({
+        success: false,
+        error: 'Order ID is required',
+        message: 'Order ID parameter is missing',
+      });
+      return;
+    }
+        apiLogger.info('Updating order', { storeId, orderId });
 
     // Validate request body
     const validationResult = updateOrderSchema.safeParse(req.body);
@@ -180,182 +182,6 @@ export async function PATCH(req: AdminRequest, res: Response): Promise<void> {
       success: false,
       error: 'Internal server error',
       message: 'Failed to update order',
-    });
-  }
-}
-
-/**
- * POST /admin/printify/orders/:id/submit
- * Submit order to Printify for production
- */
-export async function submit(req: AdminRequest, res: Response): Promise<void> {
-  try {
-    const storeId = req.user?.store_id || 'default-store';
-    const orderId = req.params.id;
-    
-    apiLogger.info('Submitting order to Printify', { storeId, orderId });
-
-    const orderService = getOrderService();
-    
-    // Check if order exists
-    const order = await orderService.getOrder(orderId);
-    if (!order) {
-      res.status(404).json({
-        success: false,
-        error: 'Order not found',
-        message: `Order with ID ${orderId} does not exist`,
-      });
-      return;
-    }
-
-    // Check if order can be submitted
-    if (order.status !== PrintifyOrderStatus.VALIDATED) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid order status',
-        message: `Order must be in VALIDATED status to submit. Current status: ${order.status}`,
-      });
-      return;
-    }
-
-    // Submit to Printify
-    const result = await orderService.submitOrder(orderId);
-
-    apiLogger.info('Order submitted successfully', { orderId, printifyOrderId: result.printifyOrderId });
-
-    res.json({
-      success: true,
-      data: {
-        order: {
-          id: result.id,
-          printify_order_id: result.printifyOrderId,
-          status: result.status,
-          submitted_at: result.submittedAt,
-        },
-      },
-    });
-  } catch (error) {
-    apiLogger.error('Failed to submit order', error as Error);
-    
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: 'Failed to submit order to Printify',
-    });
-  }
-}
-
-/**
- * POST /admin/printify/orders/:id/cancel
- * Cancel a Printify order
- */
-export async function cancel(req: AdminRequest, res: Response): Promise<void> {
-  try {
-    const storeId = req.user?.store_id || 'default-store';
-    const orderId = req.params.id;
-    
-    apiLogger.info('Cancelling order', { storeId, orderId });
-
-    // Validate request body
-    const validationResult = cancelOrderSchema.safeParse(req.body);
-    if (!validationResult.success) {
-      res.status(400).json({
-        success: false,
-        error: 'Validation failed',
-        message: 'Invalid request data',
-        details: validationResult.error.errors,
-      });
-      return;
-    }
-
-    const data = validationResult.data;
-    const orderService = getOrderService();
-    
-    // Check if order exists
-    const order = await orderService.getOrder(orderId);
-    if (!order) {
-      res.status(404).json({
-        success: false,
-        error: 'Order not found',
-        message: `Order with ID ${orderId} does not exist`,
-      });
-      return;
-    }
-
-    // Cancel order
-    const result = await orderService.cancelOrder(orderId, data.reason);
-
-    apiLogger.info('Order cancelled successfully', { orderId });
-
-    res.json({
-      success: true,
-      data: {
-        order: {
-          id: result.id,
-          status: result.status,
-          cancelled_at: result.updatedAt,
-          cancellation_reason: data.reason,
-        },
-      },
-    });
-  } catch (error) {
-    apiLogger.error('Failed to cancel order', error as Error);
-    
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: 'Failed to cancel order',
-    });
-  }
-}
-
-/**
- * POST /admin/printify/orders/:id/sync
- * Sync order status with Printify
- */
-export async function sync(req: AdminRequest, res: Response): Promise<void> {
-  try {
-    const storeId = req.user?.store_id || 'default-store';
-    const orderId = req.params.id;
-    
-    apiLogger.info('Syncing order status', { storeId, orderId });
-
-    const orderService = getOrderService();
-    
-    // Check if order exists
-    const order = await orderService.getOrder(orderId);
-    if (!order) {
-      res.status(404).json({
-        success: false,
-        error: 'Order not found',
-        message: `Order with ID ${orderId} does not exist`,
-      });
-      return;
-    }
-
-    // Sync with Printify
-    const result = await orderService.syncOrderStatus(orderId);
-
-    apiLogger.info('Order status synced successfully', { orderId, newStatus: result.status });
-
-    res.json({
-      success: true,
-      data: {
-        order: {
-          id: result.id,
-          status: result.status,
-          tracking: result.tracking,
-          updated_at: result.updatedAt,
-        },
-      },
-    });
-  } catch (error) {
-    apiLogger.error('Failed to sync order status', error as Error);
-    
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: 'Failed to sync order status',
     });
   }
 }

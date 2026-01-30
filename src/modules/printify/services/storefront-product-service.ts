@@ -5,11 +5,12 @@
  * Provides customer-facing product data with pricing, availability, and variants.
  */
 
-import { PrintifyProduct } from '../models/printify-product';
+import PrintifyProduct from '../models/printify-product';
 import { PrintifyProductVariant } from '../models/printify-product-variant';
 import { PrintifyApiClient } from './printify-api-client';
 import { logger } from '../utils/logger';
 import { PrintifyPluginError, ErrorCode, ErrorSeverity } from '../utils/error-handling';
+import type { PrintifyProductEntity } from '../types';
 
 export interface StorefrontProductFilters {
   category?: string;
@@ -35,7 +36,7 @@ export interface StorefrontProductListOptions {
 }
 
 export interface StorefrontProductListResult {
-  products: PrintifyProduct[];
+  products: PrintifyProductEntity[];
   total: number;
   hasMore: boolean;
   filters: {
@@ -52,7 +53,7 @@ export interface ProductSearchResult extends StorefrontProductListResult {
 
 export class StorefrontProductService {
   private apiClient: PrintifyApiClient;
-  private productCache: Map<string, { product: PrintifyProduct; expiry: number }> = new Map();
+  private productCache: Map<string, { product: PrintifyProductEntity; expiry: number }> = new Map();
   private variantCache: Map<string, { variants: PrintifyProductVariant[]; expiry: number }> = new Map();
   private cacheExpiry = 5 * 60 * 1000; // 5 minutes
 
@@ -77,7 +78,7 @@ export class StorefrontProductService {
 
       // In a real implementation, this would query the database
       // For now, we'll simulate the response structure
-      const mockProducts: PrintifyProduct[] = [];
+      const mockProducts: PrintifyProductEntity[] = [];
       const total = 0;
 
       // Apply filters
@@ -232,7 +233,7 @@ export class StorefrontProductService {
   /**
    * Get single product for storefront
    */
-  async getProduct(productId: string, includeVariants = true): Promise<PrintifyProduct | null> {
+  async getProduct(productId: string, includeVariants = true): Promise<PrintifyProductEntity | null> {
     try {
       // Check cache first
       const cached = this.productCache.get(productId);
@@ -251,7 +252,7 @@ export class StorefrontProductService {
 
       // In a real implementation, this would query the database
       // For now, return null as we don't have actual data
-      const product: PrintifyProduct | null = null;
+      const product: PrintifyProductEntity | null = null;
 
       if (product) {
         // Cache the product
@@ -326,7 +327,7 @@ export class StorefrontProductService {
   /**
    * Get featured products
    */
-  async getFeaturedProducts(limit = 8): Promise<PrintifyProduct[]> {
+  async getFeaturedProducts(limit = 8): Promise<PrintifyProductEntity[]> {
     try {
       logger.info('Fetching featured products', { limit });
 
@@ -356,7 +357,7 @@ export class StorefrontProductService {
   /**
    * Get related products
    */
-  async getRelatedProducts(productId: string, limit = 4): Promise<PrintifyProduct[]> {
+  async getRelatedProducts(productId: string, limit = 4): Promise<PrintifyProductEntity[]> {
     try {
       logger.info('Fetching related products', { productId, limit });
 
@@ -394,7 +395,7 @@ export class StorefrontProductService {
   /**
    * Get available filters for faceted search
    */
-  private getAvailableFilters(products: PrintifyProduct[]): {
+  private getAvailableFilters(products: PrintifyProductEntity[]): {
     categories: string[];
     tags: string[];
     priceRange: { min: number; max: number };
@@ -455,7 +456,7 @@ export class StorefrontProductService {
   /**
    * Extract tags from product data
    */
-  private getProductTags(product: PrintifyProduct): string[] {
+  private getProductTags(product: PrintifyProductEntity): string[] {
     // Extract tags from printify_data if available
     if (product.printify_data && product.printify_data.tags) {
       return Array.isArray(product.printify_data.tags) 

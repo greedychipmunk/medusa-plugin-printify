@@ -1,17 +1,8 @@
-import { Request, Response } from 'express';
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { PrintifyOrderService } from '../../../../../modules/printify/services/printify-order-service';
 import { PrintifyApiClient } from '../../../../../modules/printify/services/printify-api-client';
 import { StorefrontProductService } from '../../../../../modules/printify/services/storefront-product-service';
 import { logger } from '../../../../../modules/printify/utils/logger';
-
-// Extended Request type for Medusa admin context
-interface AdminRequest extends Request {
-  user?: {
-    store_id?: string;
-    id: string;
-    email: string;
-  };
-}
 
 // Initialize services
 const getOrderService = (): PrintifyOrderService => {
@@ -29,9 +20,9 @@ const apiLogger = logger.child('AdminOrderStatsAPI');
  * GET /admin/printify/orders/stats
  * Get order statistics and analytics
  */
-export async function GET(req: AdminRequest, res: Response): Promise<void> {
+export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.user?.store_id || 'default-store';
+    const storeId = req.auth_context?.actor_id || 'default-store';
     
     apiLogger.info('Getting order statistics', { storeId });
 

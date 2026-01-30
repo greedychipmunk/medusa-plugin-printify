@@ -5,8 +5,16 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.yalc
+yalc.lock
 
 medusa-llms.txt
+
+# Implementation backups
+*.backup/
+src.backup/
+tests.backup/
+docs.backup/
 
 # Runtime data
 pids

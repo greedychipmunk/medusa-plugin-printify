@@ -1,19 +1,10 @@
-import { Request, Response } from 'express';
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { z } from 'zod';
 import { PrintifyProductService } from '../../../../../../modules/printify/services/printify-product-service';
 import { PrintifyConfigurationService } from '../../../../../../modules/printify/services/printify-configuration-service';
 import { PrintifyApiClient } from '../../../../../../modules/printify/services/printify-api-client';
 import { logger } from '../../../../../../modules/printify/utils/logger';
 import { PrintifyPluginError, ErrorCode, ErrorSeverity } from '../../../../../../modules/printify/utils/error-handling';
-
-// Extend Express Request to include user context
-interface AdminRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    store_id?: string;
-  };
-}
 
 // Dynamic service creation helper
 async function getProductService(storeId: string): Promise<PrintifyProductService> {
@@ -30,7 +21,7 @@ async function getProductService(storeId: string): Promise<PrintifyProductServic
   }
 
   const apiClient = new PrintifyApiClient({
-    apiKey: config.getApiKey(),
+    apiKey: config.printify_api_key,
     shopId: config.printify_shop_id,
   });
   return new PrintifyProductService(apiClient, config.id);
@@ -47,11 +38,11 @@ const enableProductSchema = z.object({
  * POST /admin/printify/products/:id/enable
  * Enable a single product for storefront display
  */
-export async function POST(req: AdminRequest, res: Response): Promise<void> {
+export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.user?.store_id || 'default-store';
+    const storeId = req.auth_context?.actor_id || 'default-store';
     const productId = req.params.id;
-    const userId = req.user?.id || 'system';
+    const userId = req.auth_context?.actor_id || 'system';
     
     if (!productId) {
       res.status(400).json({
@@ -104,9 +95,9 @@ export async function POST(req: AdminRequest, res: Response): Promise<void> {
     });
   } catch (error) {
     apiLogger.error('Failed to enable product', error as Error, {
-      storeId: req.user?.store_id,
+      storeId: req.auth_context?.actor_id,
       productId: req.params.id,
-      userId: req.user?.id,
+      userId: req.auth_context?.actor_id,
     });
 
     if (error instanceof PrintifyPluginError) {

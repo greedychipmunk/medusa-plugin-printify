@@ -5,20 +5,11 @@
  * creating, updating, and testing Printify API connections.
  */
 
-import { Request, Response } from 'express';
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { z } from 'zod';
 import { PrintifyConfigurationService } from '../../../../modules/printify/services/printify-configuration-service';
 import { logger } from '../../../../modules/printify/utils/logger';
 import { ErrorFactory, PrintifyPluginError } from '../../../../modules/printify/utils/error-handling';
-
-// Extended Request type for Medusa admin context
-interface AdminRequest extends Request {
-  user?: {
-    store_id?: string;
-    id: string;
-    email: string;
-  };
-}
 
 // Request validation schemas
 const createConfigSchema = z.object({
@@ -44,10 +35,10 @@ const apiLogger = logger.child('AdminConfigAPI');
  * GET /admin/printify/config
  * Get current configuration for the store
  */
-export async function getConfiguration(req: AdminRequest, res: Response): Promise<void> {
+export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
     // Extract store ID from request (in real Medusa, this would come from auth context)
-    const storeId = req.user?.store_id || 'default-store';
+    const storeId = req.auth_context?.actor_id || 'default-store';
     
     apiLogger.info('Getting configuration', { storeId });
 
@@ -71,8 +62,8 @@ export async function getConfiguration(req: AdminRequest, res: Response): Promis
         printify_shop_id: configuration.printify_shop_id,
         sync_enabled: configuration.sync_enabled,
         sync_frequency: configuration.sync_frequency,
-        has_api_key: !!configuration.getApiKey(),
-        has_webhook_secret: !!configuration.getWebhookSecret(),
+        has_api_key: !!configuration.printify_api_key,
+        has_webhook_secret: !!configuration.webhook_secret,
         created_at: configuration.created_at,
         updated_at: configuration.updated_at,
       },
@@ -92,9 +83,9 @@ export async function getConfiguration(req: AdminRequest, res: Response): Promis
  * POST /admin/printify/config
  * Create or update configuration for the store
  */
-export async function createOrUpdateConfiguration(req: AdminRequest, res: Response): Promise<void> {
+export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.user?.store_id || 'default-store';
+    const storeId = req.auth_context?.actor_id || 'default-store';
     
     apiLogger.info('Creating/updating configuration', { storeId });
 
@@ -166,9 +157,9 @@ export async function createOrUpdateConfiguration(req: AdminRequest, res: Respon
  * PUT /admin/printify/config
  * Update existing configuration
  */
-export async function updateConfiguration(req: AdminRequest, res: Response): Promise<void> {
+export async function PUT(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.user?.store_id || 'default-store';
+    const storeId = req.auth_context?.actor_id || 'default-store';
     
     apiLogger.info('Updating configuration', { storeId });
 
@@ -225,99 +216,3 @@ export async function updateConfiguration(req: AdminRequest, res: Response): Pro
     });
   }
 }
-
-/**
- * POST /admin/printify/config/test
- * Test configuration connection to Printify API
- */
-export async function testConfiguration(req: AdminRequest, res: Response): Promise<void> {
-  try {
-    const storeId = req.user?.store_id || 'default-store';
-    
-    apiLogger.info('Testing configuration', { storeId });
-
-    const testResult = await configService.testConfiguration(storeId);
-
-    if (testResult.success) {
-      apiLogger.info('Configuration test successful', { storeId });
-      
-      res.status(200).json({
-        success: true,
-        message: 'Configuration test successful',
-        data: {
-          connection_status: 'connected',
-          shop_info: testResult.shop_info,
-        },
-      });
-    } else {
-      apiLogger.warn('Configuration test failed', { storeId, error: testResult.error });
-      
-      res.status(400).json({
-        success: false,
-        error: 'Connection test failed',
-        message: testResult.error || 'Failed to connect to Printify API',
-        data: {
-          connection_status: 'failed',
-        },
-      });
-    }
-  } catch (error) {
-    apiLogger.error('Failed to test configuration', error as Error);
-
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: 'Failed to test configuration',
-    });
-  }
-}
-
-/**
- * DELETE /admin/printify/config
- * Delete configuration for the store
- */
-export async function deleteConfiguration(req: AdminRequest, res: Response): Promise<void> {
-  try {
-    const storeId = req.user?.store_id || 'default-store';
-    
-    apiLogger.info('Deleting configuration', { storeId });
-
-    await configService.deleteConfiguration(storeId);
-
-    apiLogger.info('Configuration deleted successfully', { storeId });
-
-    res.status(200).json({
-      success: true,
-      message: 'Configuration deleted successfully',
-    });
-  } catch (error) {
-    apiLogger.error('Failed to delete configuration', error as Error);
-
-    if (error instanceof PrintifyPluginError) {
-      res.status(error.code === 'INVALID_CONFIG' ? 404 : 400).json({
-        success: false,
-        error: error.code,
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: 'Failed to delete configuration',
-    });
-  }
-}
-
-// Route handlers mapping
-export const configRoutes = {
-  GET: getConfiguration,
-  POST: createOrUpdateConfiguration,
-  PUT: updateConfiguration,
-  DELETE: deleteConfiguration,
-};
-
-export const configTestRoutes = {
-  POST: testConfiguration,
-};

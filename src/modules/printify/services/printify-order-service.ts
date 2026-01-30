@@ -5,12 +5,14 @@
  * and order status management.
  */
 
-import { PrintifyOrder, PrintifyOrderStatus, PrintifyOrderShippingAddress } from '../models/printify-order';
+import PrintifyOrder, { PrintifyOrderStatus } from '../models/printify-order';
+import { PrintifyOrderShippingAddress, PrintifyOrderType as PrintifyOrderTypeTemp, PrintifyOrderEntity } from '../types';
 import { PrintifyCartItem } from '../models/printify-cart-item';
 import { PrintifyApiClient } from './printify-api-client';
 import { StorefrontProductService } from './storefront-product-service';
 import { PrintifyPluginError, ErrorCode, ErrorSeverity } from '../utils/error-handling';
 import { logger } from '../utils/logger';
+import { wrapOrder, wrapConfiguration, PrintifyOrderBridge } from '../utils/dml-bridge';
 
 export interface CreateOrderRequest {
   medusaOrderId: string;
@@ -59,9 +61,10 @@ export interface OrderStats {
 }
 
 export class PrintifyOrderService {
-  private orders: Map<string, PrintifyOrder> = new Map();
+  private orders: Map<string, PrintifyOrderBridge> = new Map();
   private ordersByMedusaId: Map<string, string> = new Map();
   private ordersByPrintifyId: Map<string, string> = new Map();
+  private orderCounter = 0; // Add counter for unique IDs
 
   constructor(
     private apiClient: PrintifyApiClient,
@@ -71,7 +74,7 @@ export class PrintifyOrderService {
   /**
    * Create order from cart items
    */
-  async createOrder(request: CreateOrderRequest): Promise<PrintifyOrder> {
+  async createOrder(request: CreateOrderRequest): Promise<PrintifyOrderBridge> {
     try {
       logger.info('Creating Printify order', {
         medusaOrderId: request.medusaOrderId,
@@ -82,49 +85,98 @@ export class PrintifyOrderService {
       await this.validateCartItems(request.cartItems);
 
       // Create order from cart items
-      const order = PrintifyOrder.fromCartItems(request.cartItems, request.medusaOrderId, {
+      // TODO: Update for DML pattern in next phase
+      // const order = PrintifyOrder.fromCartItems(request.cartItems, request.medusaOrderId, {
+      // Calculate total price from cart items
+      const itemsTotal = (request.cartItems || []).reduce((sum, item) => {
+        return sum + (item.pricing?.totalPrice || 0);
+      }, 0);
+      
+      const subtotal = itemsTotal;
+      const shippingCost = request.shippingCost || 0;
+      const taxAmount = request.taxAmount || 0;
+      const discountAmount = request.discountAmount || 0;
+      const totalPrice = subtotal + shippingCost + taxAmount - discountAmount;
+
+      // Create simple data object for DML entity compatibility
+      const orderData = {
+        id: `order_${Date.now()}_${++this.orderCounter}`, // Add counter to ensure uniqueness
+        medusa_order_id: request.medusaOrderId,
+        printify_order_id: undefined,
+        configuration_id: 'temp',
+        status: 'pending',
+        line_items: request.cartItems || [],
+        shipping_address: request.shippingAddress,
+        total_price: totalPrice,
+        created_at: new Date(),
+        updated_at: new Date(),
+        submitted_at: undefined,
+        error_details: undefined,
+        tracking: undefined,
+        printify_data: undefined,
+
+        // Backward compatibility properties
+        medusaOrderId: request.medusaOrderId,
+        printifyOrderId: undefined,
         customerId: request.customerId,
-        email: request.customerEmail,
+        customerEmail: request.customerEmail,
+        pricing: { 
+          total: totalPrice, 
+          subtotal: subtotal,
+          shippingCost: shippingCost,
+          taxAmount: taxAmount,
+          discountAmount: discountAmount,
+          currency: 'USD' 
+        },
+        items: request.cartItems || [],
         shippingAddress: request.shippingAddress,
-      });
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        submittedAt: undefined,
+        retryCount: 0,
+        maxRetries: 3,
+      };
 
+      // Create bridge for backward compatibility
+      const order = new PrintifyOrderBridge(orderData);
+
+      // TODO: Update pricing logic for DML pattern in next phase
       // Update pricing with shipping and tax
-      if (request.shippingCost !== undefined) {
-        order.pricing.shippingCost = request.shippingCost;
-      }
-      if (request.taxAmount !== undefined) {
-        order.pricing.taxAmount = request.taxAmount;
-      }
-      if (request.discountAmount !== undefined) {
-        order.pricing.discountAmount = request.discountAmount;
-      }
+      // if (request.shippingCost !== undefined) {
+      //   order.pricing.shippingCost = request.shippingCost;
+      // }
+      // if (request.taxAmount !== undefined) {
+      //   order.pricing.taxAmount = request.taxAmount;
+      // }
+      // if (request.discountAmount !== undefined) {
+      //   order.pricing.discountAmount = request.discountAmount;
+      // }
 
-      // Recalculate total
-      order.pricing.total = order.pricing.subtotal + order.pricing.shippingCost + 
-                           order.pricing.taxAmount - order.pricing.discountAmount;
+      // TODO: Recalculate total for DML pattern in next phase
+      // order.pricing.total = order.pricing.subtotal + order.pricing.shippingCost + 
+      //                      order.pricing.taxAmount - order.pricing.discountAmount;
 
-      // Validate order
-      const validation = order.validate();
-      if (!validation.isValid) {
-        throw new PrintifyPluginError(
-          ErrorCode.VALIDATION_ERROR,
-          `Order validation failed: ${validation.errors.join(', ')}`,
-          ErrorSeverity.HIGH,
-          { errors: validation.errors }
-        );
-      }
+      // TODO: Validate order for DML pattern in next phase  
+      // const validation = order.validate();
+      // if (!validation.isValid) {
+      //   throw new PrintifyPluginError(
+      //     ErrorCode.VALIDATION_ERROR,
+      //     `Order validation failed: ${validation.errors.join(', ')}`,
+      //     ErrorSeverity.HIGH,
+      //     { errors: validation.errors }
+      //   );
+      // }
 
       // Store order
       this.orders.set(order.id, order);
       this.ordersByMedusaId.set(order.medusaOrderId, order.id);
 
-      // Update status to validated
-      order.updateStatus(PrintifyOrderStatus.VALIDATED, 'Order created and validated');
+      // Order remains in 'pending' status ready for submission
 
       logger.info('Successfully created Printify order', {
         orderId: order.id,
         medusaOrderId: order.medusaOrderId,
-        total: order.getFormattedTotal(),
+        total: order.pricing.total,
       });
 
       return order;
@@ -139,7 +191,7 @@ export class PrintifyOrderService {
   /**
    * Submit order to Printify
    */
-  async submitOrder(orderId: string): Promise<PrintifyOrder> {
+  async submitOrder(orderId: string): Promise<PrintifyOrderBridge> {
     try {
       const order = this.getOrder(orderId);
       
@@ -172,14 +224,13 @@ export class PrintifyOrderService {
       }
 
       // Update order with Printify ID and status
-      order.updateStatus(
-        PrintifyOrderStatus.SUBMITTED, 
-        'Order submitted to Printify',
-        response.id
-      );
+      order.entity.status = 'submitted';
+      order.entity.printify_order_id = response.id;
+      order.entity.updated_at = new Date();
+      order.entity.submitted_at = new Date();
       
       this.ordersByPrintifyId.set(response.id, order.id);
-      order.clearError();
+      order.entity.error_details = undefined;
 
       logger.info('Successfully submitted order to Printify', {
         orderId: order.id,
@@ -191,7 +242,8 @@ export class PrintifyOrderService {
     } catch (error) {
       const order = this.orders.get(orderId);
       if (order) {
-        order.setError((error as Error).message);
+        order.entity.error_details = (error as Error).message;
+        order.entity.updated_at = new Date();
       }
       
       logger.error('Failed to submit order to Printify', error as Error, { orderId });
@@ -202,7 +254,7 @@ export class PrintifyOrderService {
   /**
    * Get order by ID
    */
-  getOrder(orderId: string): PrintifyOrder {
+  getOrder(orderId: string): PrintifyOrderBridge {
     const order = this.orders.get(orderId);
     if (!order) {
       throw new PrintifyPluginError(
@@ -218,7 +270,7 @@ export class PrintifyOrderService {
   /**
    * Get order by Medusa order ID
    */
-  getOrderByMedusaId(medusaOrderId: string): PrintifyOrder | null {
+  getOrderByMedusaId(medusaOrderId: string): PrintifyOrderBridge | null {
     const orderId = this.ordersByMedusaId.get(medusaOrderId);
     return orderId ? this.orders.get(orderId) || null : null;
   }
@@ -226,7 +278,7 @@ export class PrintifyOrderService {
   /**
    * Get order by Printify order ID
    */
-  getOrderByPrintifyId(printifyOrderId: string): PrintifyOrder | null {
+  getOrderByPrintifyId(printifyOrderId: string): PrintifyOrderBridge | null {
     const orderId = this.ordersByPrintifyId.get(printifyOrderId);
     return orderId ? this.orders.get(orderId) || null : null;
   }
@@ -234,7 +286,7 @@ export class PrintifyOrderService {
   /**
    * Update order status
    */
-  async updateOrderStatus(orderId: string, update: OrderStatusUpdate): Promise<PrintifyOrder> {
+  async updateOrderStatus(orderId: string, update: OrderStatusUpdate): Promise<PrintifyOrderBridge> {
     try {
       const order = this.getOrder(orderId);
 
@@ -279,7 +331,7 @@ export class PrintifyOrderService {
   /**
    * Cancel order
    */
-  async cancelOrder(orderId: string, reason?: string): Promise<PrintifyOrder> {
+  async cancelOrder(orderId: string, reason?: string): Promise<PrintifyOrderBridge> {
     try {
       const order = this.getOrder(orderId);
 
@@ -330,7 +382,7 @@ export class PrintifyOrderService {
    * List orders with filtering and pagination
    */
   async listOrders(options: OrderListOptions = {}): Promise<{
-    orders: PrintifyOrder[];
+    orders: PrintifyOrderBridge[];
     total: number;
     hasMore: boolean;
   }> {
@@ -349,7 +401,7 @@ export class PrintifyOrderService {
     let filteredOrders = Array.from(this.orders.values());
 
     if (status && status.length > 0) {
-      filteredOrders = filteredOrders.filter(order => status.includes(order.status));
+      filteredOrders = filteredOrders.filter(order => status.includes(order.status as PrintifyOrderStatus));
     }
 
     if (customerId) {
@@ -456,7 +508,7 @@ export class PrintifyOrderService {
   /**
    * Retry failed order
    */
-  async retryOrder(orderId: string): Promise<PrintifyOrder> {
+  async retryOrder(orderId: string): Promise<PrintifyOrderBridge> {
     const order = this.getOrder(orderId);
 
     if (order.status !== PrintifyOrderStatus.FAILED) {
@@ -477,9 +529,10 @@ export class PrintifyOrderService {
       );
     }
 
-    // Reset order to validated status
-    order.updateStatus(PrintifyOrderStatus.VALIDATED, 'Order retry initiated');
-    order.clearError();
+    // Reset order to pending status for retry
+    order.entity.status = 'pending';
+    order.entity.error_details = undefined;
+    order.entity.updated_at = new Date();
 
     return this.submitOrder(orderId);
   }
@@ -487,7 +540,7 @@ export class PrintifyOrderService {
   /**
    * Sync order status from Printify
    */
-  async syncOrderStatus(orderId: string): Promise<PrintifyOrder> {
+  async syncOrderStatus(orderId: string): Promise<PrintifyOrderBridge> {
     const order = this.getOrder(orderId);
 
     if (!order.printifyOrderId) {
@@ -572,11 +625,11 @@ export class PrintifyOrderService {
   /**
    * Prepare order data for Printify API
    */
-  private preparePrintifyOrderData(order: PrintifyOrder): Record<string, any> {
+  private preparePrintifyOrderData(order: PrintifyOrderBridge): Record<string, any> {
     return {
       external_id: order.medusaOrderId,
       label: `Medusa Order ${order.medusaOrderId}`,
-      line_items: order.items.map(item => ({
+      line_items: order.items.map((item: any) => ({
         product_id: item.printifyProductId,
         variant_id: item.printifyVariantId,
         quantity: item.quantity,
@@ -634,5 +687,6 @@ export class PrintifyOrderService {
     this.orders.clear();
     this.ordersByMedusaId.clear();
     this.ordersByPrintifyId.clear();
+    this.orderCounter = 0; // Reset counter when clearing orders
   }
 }

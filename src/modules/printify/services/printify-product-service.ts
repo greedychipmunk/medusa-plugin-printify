@@ -5,7 +5,8 @@
  * enablement management, and product data operations.
  */
 
-import { PrintifyProduct, PrintifyProductData } from '../models/printify-product';
+import PrintifyProduct from '../models/printify-product';
+import { PrintifyProductType as PrintifyProductTemp, PrintifyProductData, PrintifyProductEntity } from '../types';
 import { ProductEnablementHistory } from '../models/product-enablement-history';
 import { SyncLog } from '../models/sync-log';
 import { PrintifyApiClient, PrintifyProduct as ApiProduct } from './printify-api-client';
@@ -22,7 +23,7 @@ export interface ProductListOptions {
 }
 
 export interface ProductListResult {
-  products: PrintifyProduct[];
+  products: PrintifyProductEntity[];
   total: number;
   page: number;
   limit: number;
@@ -104,7 +105,7 @@ export class PrintifyProductService {
   /**
    * Get single product by ID
    */
-  async getProduct(productId: string): Promise<PrintifyProduct | null> {
+  async getProduct(productId: string): Promise<PrintifyProductEntity | null> {
     this.logger.info('Getting product', { productId, configurationId: this.configurationId });
 
     try {
@@ -120,7 +121,7 @@ export class PrintifyProductService {
   /**
    * Enable a product for storefront display
    */
-  async enableProduct(productId: string, triggeredBy: string, reason?: string): Promise<PrintifyProduct> {
+  async enableProduct(productId: string, triggeredBy: string, reason?: string): Promise<PrintifyProductEntity> {
     this.logger.info('Enabling product', { productId, triggeredBy, reason });
 
     try {
@@ -130,7 +131,7 @@ export class PrintifyProductService {
       }
 
       const previousState = product.enabled;
-      product.enable();
+      product.enabled = true;
 
       // Create history record
       const historyRecord = ProductEnablementHistory.forProductEnable({
@@ -163,7 +164,7 @@ export class PrintifyProductService {
   /**
    * Disable a product from storefront display
    */
-  async disableProduct(productId: string, triggeredBy: string, reason?: string): Promise<PrintifyProduct> {
+  async disableProduct(productId: string, triggeredBy: string, reason?: string): Promise<PrintifyProductEntity> {
     this.logger.info('Disabling product', { productId, triggeredBy, reason });
 
     try {
@@ -173,7 +174,7 @@ export class PrintifyProductService {
       }
 
       const previousState = product.enabled;
-      product.disable();
+      product.enabled = false;
 
       // Create history record
       const historyRecord = ProductEnablementHistory.forProductDisable({
@@ -239,7 +240,7 @@ export class PrintifyProductService {
         }
 
         const previousState = product.enabled;
-        product.enable();
+        product.enabled = true;
 
         // Create history record
         const historyRecord = ProductEnablementHistory.forBulkEnable({
@@ -318,7 +319,7 @@ export class PrintifyProductService {
         }
 
         const previousState = product.enabled;
-        product.disable();
+        product.enabled = false;
 
         // Create history record
         const historyRecord = ProductEnablementHistory.forBulkDisable({
@@ -462,21 +463,37 @@ export class PrintifyProductService {
 
     if (existingProduct) {
       // Skip if not forced and product doesn't need sync
-      if (!force && !existingProduct.needsSync(maxAgeMinutes)) {
+      if (!force && existingProduct.last_sync_at && 
+          (new Date().getTime() - existingProduct.last_sync_at.getTime()) < maxAgeMinutes * 60 * 1000) {
         return;
       }
 
-      // Update existing product
-      existingProduct.updateFromPrintify(apiProduct);
+      // Update existing product from Printify data
+      existingProduct.title = apiProduct.title;
+      existingProduct.description = apiProduct.description;
+      existingProduct.tags = apiProduct.tags;
+      existingProduct.images = apiProduct.images;
+      existingProduct.printify_data = apiProduct;
+      existingProduct.last_sync_at = new Date();
+      existingProduct.updated_at = new Date();
       // In a real implementation, save to database
     } else {
-      // Create new product
-      const newProduct = PrintifyProduct.createFromPrintify({
+      // Create new product (temporary DML compatibility)
+      const newProduct: PrintifyProductEntity = {
+        id: `product_${Date.now()}_${apiProduct.id}`,
         printify_product_id: apiProduct.id,
         configuration_id: this.configurationId,
-        printifyData: apiProduct,
+        title: apiProduct.title,
+        description: apiProduct.description,
         enabled: false, // Default to disabled for new products
-      });
+        blueprint_id: apiProduct.blueprint_id.toString(),
+        print_provider_id: '0', // TODO: Get from blueprint data
+        tags: apiProduct.tags,
+        images: apiProduct.images,
+        printify_data: apiProduct,
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
       
       // In a real implementation, save to database
     }
@@ -485,7 +502,7 @@ export class PrintifyProductService {
   /**
    * Find product by Printify product ID
    */
-  private async findProductByPrintifyId(printifyProductId: string): Promise<PrintifyProduct | null> {
+  private async findProductByPrintifyId(printifyProductId: string): Promise<PrintifyProductEntity | null> {
     // In a real implementation, this would query the database
     // For now, return null
     return null;
