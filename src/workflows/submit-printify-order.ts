@@ -125,6 +125,18 @@ const updateOrderRecordStep = createStep(
 
     const order = await printifyService.getOrderBridge(input.order_id)
 
+    // Create module link to Medusa order if not already linked
+    try {
+      const { Modules } = await import("@medusajs/framework/utils")
+      const link = container.resolve("link") as any
+      await link.create({
+        [PRINTIFY_MODULE]: { printify_order_id: input.order_id },
+        [Modules.ORDER]: { order_id: order.medusaOrderId },
+      })
+    } catch {
+      // Non-fatal: link may already exist from createOrderFromCart
+    }
+
     return new StepResponse({
       id: order.id,
       printify_order_id: order.printifyOrderId,

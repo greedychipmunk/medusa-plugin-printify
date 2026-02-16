@@ -68,6 +68,12 @@ interface OrderDetail {
   updated_at: string
   submitted_at?: string
   last_error?: string
+  medusa_order?: {
+    id: string
+    display_id: string
+    status: string
+    email: string
+  }
 }
 
 const STATUS_COLORS: Record<string, "green" | "orange" | "blue" | "red" | "grey" | "purple"> = {
@@ -254,6 +260,11 @@ const PrintifyOrderDetailPage = () => {
           <Text size="small" className="text-ui-fg-subtle">
             Customer: {order.customer_email}
           </Text>
+          {order.medusa_order && (
+            <StatusBadge color="blue">
+              Medusa #{order.medusa_order.display_id}
+            </StatusBadge>
+          )}
         </div>
 
         {order.last_error && (
