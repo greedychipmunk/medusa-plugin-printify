@@ -1,7 +1,5 @@
-import { PrintifyConfigurationService } from "./services/printify-configuration-service"
+import PrintifyModuleService from "./service"
 
 export const PRINTIFY_MODULE = "printify"
 
-export default {
-  service: PrintifyConfigurationService,
-}
+export default PrintifyModuleService

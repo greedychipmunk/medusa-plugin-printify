@@ -1,71 +1,41 @@
-import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { PrintifyOrderService } from '../../../../../../modules/printify/services/printify-order-service';
-import { PrintifyOrderStatus } from '../../../../../../modules/printify/models/printify-order';
-import { PrintifyApiClient } from '../../../../../../modules/printify/services/printify-api-client';
-import { StorefrontProductService } from '../../../../../../modules/printify/services/storefront-product-service';
-import { logger } from '../../../../../../modules/printify/utils/logger';
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import type PrintifyModuleService from "../../../../../../modules/printify/service"
+import { PRINTIFY_MODULE } from "../../../../../../modules/printify"
+import { PrintifyOrderStatus } from "../../../../../../modules/printify/models/printify-order"
+import { logger } from "../../../../../../modules/printify/utils/logger"
 
-// Initialize services
-const getOrderService = (): PrintifyOrderService => {
-  const apiClient = new PrintifyApiClient({
-    apiKey: process.env.PRINTIFY_API_KEY || 'dummy-key',
-    shopId: process.env.PRINTIFY_SHOP_ID || 'dummy-shop',
-  });
-  const storefrontService = new StorefrontProductService(apiClient);
-  return new PrintifyOrderService(apiClient, storefrontService);
-};
+const apiLogger = logger.child("AdminOrderSubmitAPI")
 
-const apiLogger = logger.child('AdminOrderSubmitAPI');
-
-/**
- * POST /admin/printify/orders/:id/submit
- * Submit order to Printify for production
- */
 export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.auth_context?.actor_id || 'default-store';
-    const orderId = req.params.id;
-    
+    const orderId = req.params.id
+    const printifyService: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
+
     if (!orderId) {
+      res.status(400).json({ success: false, error: "Order ID is required", message: "Order ID parameter is missing" })
+      return
+    }
+
+    apiLogger.info("Submitting order to Printify", { orderId })
+
+    const order = await printifyService.getOrderBridge(orderId)
+
+    if (order.status !== PrintifyOrderStatus.VALIDATED && order.status !== PrintifyOrderStatus.PENDING) {
       res.status(400).json({
         success: false,
-        error: 'Order ID is required',
-        message: 'Order ID parameter is missing',
-      });
-      return;
-    }
-    
-    apiLogger.info('Submitting order to Printify', { storeId, orderId });
-
-    const orderService = getOrderService();
-    
-    // Check if order exists
-    const order = await orderService.getOrder(orderId);
-    if (!order) {
-      res.status(404).json({
-        success: false,
-        error: 'Order not found',
-        message: `Order with ID ${orderId} does not exist`,
-      });
-      return;
+        error: "Invalid order status",
+        message: "Order must be validated or pending before it can be submitted",
+      })
+      return
     }
 
-    // Check if order can be submitted
-    if (order.status !== PrintifyOrderStatus.VALIDATED) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid order status',
-        message: 'Order must be validated before it can be submitted',
-      });
-      return;
-    }
-
-    // Submit the order
-    const result = await orderService.submitOrder(orderId);
+    const storeId = req.auth_context?.actor_id || "default-store"
+    const apiClient = await printifyService.getApiClientForStore(storeId)
+    const result = await printifyService.submitPrintifyOrder(orderId, apiClient)
 
     res.json({
       success: true,
-      message: 'Order submitted successfully',
+      message: "Order submitted successfully",
       data: {
         order: {
           id: result.id,
@@ -75,14 +45,15 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
           submitted_at: result.submittedAt,
         },
       },
-    });
+    })
   } catch (error) {
-    apiLogger.error('Failed to submit order', error as Error);
+    apiLogger.error("Failed to submit order", error as Error)
 
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: 'Failed to submit order',
-    });
+    if ((error as any)?.code === "ENTITY_NOT_FOUND") {
+      res.status(404).json({ success: false, error: "Order not found", message: `Order with ID ${req.params.id} does not exist` })
+      return
+    }
+
+    res.status(500).json({ success: false, error: "Internal server error", message: "Failed to submit order" })
   }
 }

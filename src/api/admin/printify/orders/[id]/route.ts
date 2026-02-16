@@ -1,62 +1,28 @@
-import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { z } from 'zod';
-import { PrintifyOrderService } from '../../../../../modules/printify/services/printify-order-service';
-import { PrintifyOrderStatus } from '../../../../../modules/printify/models/printify-order';
-import { PrintifyApiClient } from '../../../../../modules/printify/services/printify-api-client';
-import { StorefrontProductService } from '../../../../../modules/printify/services/storefront-product-service';
-import { logger } from '../../../../../modules/printify/utils/logger';
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { z } from "zod"
+import type PrintifyModuleService from "../../../../../modules/printify/service"
+import { PRINTIFY_MODULE } from "../../../../../modules/printify"
+import { PrintifyOrderStatus } from "../../../../../modules/printify/models/printify-order"
+import { logger } from "../../../../../modules/printify/utils/logger"
 
-// Request validation schemas
 const updateOrderSchema = z.object({
-  status: z.enum(['pending', 'validated', 'submitted', 'processing', 'shipped', 'delivered', 'cancelled', 'failed']).optional(),
+  status: z.enum(["pending", "validated", "submitted", "processing", "shipped", "delivered", "cancelled", "failed"]).optional(),
   notes: z.string().optional(),
-});
+})
 
-const cancelOrderSchema = z.object({
-  reason: z.string().min(1, 'Cancellation reason is required'),
-});
+const apiLogger = logger.child("AdminOrderDetailAPI")
 
-// Initialize services
-const getOrderService = (): PrintifyOrderService => {
-  const apiClient = new PrintifyApiClient({
-    apiKey: process.env.PRINTIFY_API_KEY || 'dummy-key',
-    shopId: process.env.PRINTIFY_SHOP_ID || 'dummy-shop',
-  });
-  const storefrontService = new StorefrontProductService(apiClient);
-  return new PrintifyOrderService(apiClient, storefrontService);
-};
-
-const apiLogger = logger.child('AdminOrderDetailAPI');
-
-/**
- * GET /admin/printify/orders/:id
- * Get details of a specific Printify order
- */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.auth_context?.actor_id || 'default-store';
-    const orderId = req.params.id;
-        if (!orderId) {
-      res.status(400).json({
-        success: false,
-        error: 'Order ID is required',
-        message: 'Order ID parameter is missing',
-      });
-      return;
-    }
-        apiLogger.info('Getting order details', { storeId, orderId });
+    const orderId = req.params.id
+    const printifyService: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
 
-    const orderService = getOrderService();
-    const order = await orderService.getOrder(orderId);
-
-    if (!order) {
-      res.status(404).json({
-        success: false,
-        error: 'Order not found',
-        message: `Order with ID ${orderId} does not exist`,
-      });
-      return;
+    if (!orderId) {
+      res.status(400).json({ success: false, error: "Order ID is required", message: "Order ID parameter is missing" })
+      return
     }
+
+    const order = await printifyService.getOrderBridge(orderId)
 
     res.json({
       success: true,
@@ -92,96 +58,62 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
           updated_at: order.updatedAt,
           submitted_at: order.submittedAt,
           last_error: order.lastError,
-          retry_count: 0, // TODO: Add retry_count field to DML model
+          retry_count: 0,
         },
       },
-    });
+    })
   } catch (error) {
-    apiLogger.error('Failed to get order details', error as Error);
-    
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: 'Failed to retrieve order details',
-    });
+    apiLogger.error("Failed to get order details", error as Error)
+
+    if ((error as any)?.code === "ENTITY_NOT_FOUND") {
+      res.status(404).json({ success: false, error: "Order not found", message: `Order with ID ${req.params.id} does not exist` })
+      return
+    }
+
+    res.status(500).json({ success: false, error: "Internal server error", message: "Failed to retrieve order details" })
   }
 }
 
-/**
- * PATCH /admin/printify/orders/:id
- * Update order status or notes
- */
 export async function PATCH(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.auth_context?.actor_id || 'default-store';
-    const orderId = req.params.id;
-        if (!orderId) {
-      res.status(400).json({
-        success: false,
-        error: 'Order ID is required',
-        message: 'Order ID parameter is missing',
-      });
-      return;
-    }
-        apiLogger.info('Updating order', { storeId, orderId });
+    const orderId = req.params.id
+    const printifyService: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
 
-    // Validate request body
-    const validationResult = updateOrderSchema.safeParse(req.body);
+    if (!orderId) {
+      res.status(400).json({ success: false, error: "Order ID is required", message: "Order ID parameter is missing" })
+      return
+    }
+
+    const validationResult = updateOrderSchema.safeParse(req.body)
     if (!validationResult.success) {
-      res.status(400).json({
-        success: false,
-        error: 'Validation failed',
-        message: 'Invalid request data',
-        details: validationResult.error.errors,
-      });
-      return;
+      res.status(400).json({ success: false, error: "Validation failed", message: "Invalid request data", details: validationResult.error.errors })
+      return
     }
 
-    const data = validationResult.data;
-    const orderService = getOrderService();
+    const data = validationResult.data
 
-    // Get current order
-    const order = await orderService.getOrder(orderId);
-    if (!order) {
-      res.status(404).json({
-        success: false,
-        error: 'Order not found',
-        message: `Order with ID ${orderId} does not exist`,
-      });
-      return;
-    }
-
-    // Update status if provided
     if (data.status) {
-      await orderService.updateOrderStatus(orderId, {
+      await printifyService.updateOrderStatus(orderId, {
         status: data.status as PrintifyOrderStatus,
         note: data.notes,
-      });
+      })
     }
 
-    // Get updated order
-    const updatedOrder = await orderService.getOrder(orderId);
-
-    apiLogger.info('Order updated successfully', { orderId });
+    const updatedOrder = await printifyService.getOrderBridge(orderId)
 
     res.json({
       success: true,
       data: {
         order: {
-          id: updatedOrder!.id,
-          medusa_order_id: updatedOrder!.medusaOrderId,
-          status: updatedOrder!.status,
-          updated_at: updatedOrder!.updatedAt,
+          id: updatedOrder.id,
+          medusa_order_id: updatedOrder.medusaOrderId,
+          status: updatedOrder.status,
+          updated_at: updatedOrder.updatedAt,
         },
       },
-    });
+    })
   } catch (error) {
-    apiLogger.error('Failed to update order', error as Error);
-    
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: 'Failed to update order',
-    });
+    apiLogger.error("Failed to update order", error as Error)
+    res.status(500).json({ success: false, error: "Internal server error", message: "Failed to update order" })
   }
 }

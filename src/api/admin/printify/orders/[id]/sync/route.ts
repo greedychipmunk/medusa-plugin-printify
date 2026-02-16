@@ -1,60 +1,29 @@
-import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { PrintifyOrderService } from '../../../../../../modules/printify/services/printify-order-service';
-import { PrintifyApiClient } from '../../../../../../modules/printify/services/printify-api-client';
-import { StorefrontProductService } from '../../../../../../modules/printify/services/storefront-product-service';
-import { logger } from '../../../../../../modules/printify/utils/logger';
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import type PrintifyModuleService from "../../../../../../modules/printify/service"
+import { PRINTIFY_MODULE } from "../../../../../../modules/printify"
+import { logger } from "../../../../../../modules/printify/utils/logger"
 
-// Initialize services
-const getOrderService = (): PrintifyOrderService => {
-  const apiClient = new PrintifyApiClient({
-    apiKey: process.env.PRINTIFY_API_KEY || 'dummy-key',
-    shopId: process.env.PRINTIFY_SHOP_ID || 'dummy-shop',
-  });
-  const storefrontService = new StorefrontProductService(apiClient);
-  return new PrintifyOrderService(apiClient, storefrontService);
-};
+const apiLogger = logger.child("AdminOrderSyncAPI")
 
-const apiLogger = logger.child('AdminOrderSyncAPI');
-
-/**
- * POST /admin/printify/orders/:id/sync
- * Sync order status from Printify
- */
 export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.auth_context?.actor_id || 'default-store';
-    const orderId = req.params.id;
-    
+    const orderId = req.params.id
+    const printifyService: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
+
     if (!orderId) {
-      res.status(400).json({
-        success: false,
-        error: 'Order ID is required',
-        message: 'Order ID parameter is missing',
-      });
-      return;
-    }
-    
-    apiLogger.info('Syncing order status from Printify', { storeId, orderId });
-
-    const orderService = getOrderService();
-    
-    // Check if order exists
-    const order = await orderService.getOrder(orderId);
-    if (!order) {
-      res.status(404).json({
-        success: false,
-        error: 'Order not found',
-        message: `Order with ID ${orderId} does not exist`,
-      });
-      return;
+      res.status(400).json({ success: false, error: "Order ID is required", message: "Order ID parameter is missing" })
+      return
     }
 
-    // Sync the order status
-    const result = await orderService.syncOrderStatus(orderId);
+    apiLogger.info("Syncing order status from Printify", { orderId })
+
+    const storeId = req.auth_context?.actor_id || "default-store"
+    const apiClient = await printifyService.getApiClientForStore(storeId)
+    const result = await printifyService.syncOrderStatus(orderId, apiClient)
 
     res.json({
       success: true,
-      message: 'Order status synced successfully',
+      message: "Order status synced successfully",
       data: {
         order: {
           id: result.id,
@@ -64,14 +33,15 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
           synced_at: result.updatedAt,
         },
       },
-    });
+    })
   } catch (error) {
-    apiLogger.error('Failed to sync order status', error as Error);
+    apiLogger.error("Failed to sync order status", error as Error)
 
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: 'Failed to sync order status',
-    });
+    if ((error as any)?.code === "ENTITY_NOT_FOUND") {
+      res.status(404).json({ success: false, error: "Order not found", message: `Order with ID ${req.params.id} does not exist` })
+      return
+    }
+
+    res.status(500).json({ success: false, error: "Internal server error", message: "Failed to sync order status" })
   }
 }

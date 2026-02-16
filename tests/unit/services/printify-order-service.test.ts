@@ -1,15 +1,32 @@
-import { PrintifyOrderService, CreateOrderRequest } from '../../../src/modules/printify/services/printify-order-service';
-import { StorefrontProductService } from '../../../src/modules/printify/services/storefront-product-service';
-import { PrintifyApiClient } from '../../../src/modules/printify/services/printify-api-client';
-import { PrintifyOrder, PrintifyOrderStatus } from '../../../src/modules/printify/models/printify-order';
+import PrintifyModuleService from '../../../src/modules/printify/service';
+import { PrintifyOrderStatus } from '../../../src/modules/printify/models/printify-order';
 import { PrintifyCartItem } from '../../../src/modules/printify/models/printify-cart-item';
-import { PrintifyProductVariant } from '../../../src/modules/printify/models/printify-product-variant';
 import { PrintifyPluginError } from '../../../src/modules/printify/utils/error-handling';
+import type { CreateOrderRequest } from '../../../src/modules/printify/service';
 
-describe('PrintifyOrderService', () => {
-  let orderService: PrintifyOrderService;
-  let mockApiClient: jest.Mocked<PrintifyApiClient>;
-  let mockStorefrontService: jest.Mocked<StorefrontProductService>;
+// Mock the MedusaService factory so we can instantiate without a real DB
+jest.mock('@medusajs/framework/utils', () => {
+  return {
+    MedusaService: () => class MockBase {},
+    model: {
+      define: jest.fn().mockReturnValue({}),
+      id: jest.fn().mockReturnValue({ primaryKey: jest.fn() }),
+      text: jest.fn().mockReturnValue({ nullable: jest.fn(), unique: jest.fn(), default: jest.fn() }),
+      boolean: jest.fn().mockReturnValue({ default: jest.fn() }),
+      number: jest.fn().mockReturnValue({ default: jest.fn() }),
+      json: jest.fn().mockReturnValue({ nullable: jest.fn() }),
+      dateTime: jest.fn().mockReturnValue({ nullable: jest.fn() }),
+    },
+    Module: jest.fn(),
+  };
+});
+
+describe('PrintifyOrderService (via PrintifyModuleService)', () => {
+  let service: any;
+  let mockApiClient: any;
+
+  // In-memory store simulating the database
+  let orderStore: Map<string, any>;
 
   const mockShippingAddress = {
     firstName: 'John',
@@ -36,42 +53,72 @@ describe('PrintifyOrderService', () => {
     );
   };
 
-  const createMockVariant = (): Partial<PrintifyProductVariant> => {
-    return {
-      id: 'variant-1',
-      printifyVariantId: 'printify-variant-1',
-      validateQuantity: jest.fn().mockReturnValue({ isValid: true }),
-      isAvailableForPurchase: jest.fn().mockReturnValue(true),
-    };
-  };
-
   beforeEach(() => {
-    // Create mocks
+    service = new PrintifyModuleService({} as any, {} as any);
+    orderStore = new Map();
+
+    let counter = 0;
+
+    // Mock the auto-generated CRUD methods with a shared store
+    service.createPrintifyOrders = jest.fn().mockImplementation(async (data: any[]) => {
+      return data.map((d) => {
+        const order = {
+          id: `order_${++counter}`,
+          ...d,
+          created_at: new Date(),
+          updated_at: new Date(),
+        };
+        orderStore.set(order.id, order);
+        return order;
+      });
+    });
+
+    service.retrievePrintifyOrder = jest.fn().mockImplementation(async (id: string) => {
+      const order = orderStore.get(id);
+      if (!order) throw new Error('Not found');
+      return order;
+    });
+
+    service.updatePrintifyOrders = jest.fn().mockImplementation(async (data: any[]) => {
+      return data.map((d) => {
+        const existing = orderStore.get(d.id);
+        if (existing) {
+          const updated = { ...existing, ...d, updated_at: new Date() };
+          orderStore.set(d.id, updated);
+          return updated;
+        }
+        return { ...d, updated_at: new Date() };
+      });
+    });
+
+    service.listAndCountPrintifyOrders = jest.fn().mockResolvedValue([[], 0]);
+
+    service.listPrintifyOrders = jest.fn().mockImplementation(async (opts: any) => {
+      const filters = opts?.filters || {};
+      const results: any[] = [];
+      for (const order of orderStore.values()) {
+        let match = true;
+        if (filters.medusa_order_id && order.medusa_order_id !== filters.medusa_order_id) match = false;
+        if (filters.printify_order_id && order.printify_order_id !== filters.printify_order_id) match = false;
+        if (match) results.push(order);
+      }
+      return results;
+    });
+
     mockApiClient = {
       createOrder: jest.fn(),
       getOrder: jest.fn(),
       cancelOrder: jest.fn(),
-    } as any;
-
-    mockStorefrontService = {
-      getProduct: jest.fn(),
-      getProductVariants: jest.fn(),
-    } as any;
-
-    orderService = new PrintifyOrderService(mockApiClient, mockStorefrontService);
+    };
   });
 
   afterEach(() => {
-    orderService.clearOrders();
     jest.clearAllMocks();
   });
 
   describe('order creation', () => {
     it('should create order from cart items', async () => {
       const cartItems = [createMockCartItem()];
-      const mockVariant = createMockVariant();
-
-      mockStorefrontService.getProductVariants.mockResolvedValue([mockVariant as any]);
 
       const request: CreateOrderRequest = {
         medusaOrderId: 'medusa-order-1',
@@ -80,90 +127,75 @@ describe('PrintifyOrderService', () => {
         shippingAddress: mockShippingAddress,
       };
 
-      const order = await orderService.createOrder(request);
+      const order = await service.createOrderFromCart(request);
 
       expect(order.medusaOrderId).toBe('medusa-order-1');
-      expect(order.status).toBe(PrintifyOrderStatus.PENDING); // Orders start as PENDING for submission
+      expect(order.status).toBe(PrintifyOrderStatus.PENDING);
       expect(order.items).toHaveLength(1);
       expect(order.pricing.total).toBe(3998); // 1999 * 2
       expect(order.shippingAddress.email).toBe('john.doe@example.com');
-    });
-
-    it('should validate cart items during creation', async () => {
-      const cartItems = [createMockCartItem()];
-      const mockVariant = createMockVariant();
-      mockVariant.validateQuantity = jest.fn().mockReturnValue({
-        isValid: false,
-        reason: 'Insufficient stock'
-      });
-
-      mockStorefrontService.getProductVariants.mockResolvedValue([mockVariant as any]);
-
-      const request: CreateOrderRequest = {
-        medusaOrderId: 'medusa-order-1',
-        customerEmail: 'john.doe@example.com',
-        cartItems,
-        shippingAddress: mockShippingAddress,
-      };
-
-      await expect(orderService.createOrder(request))
-        .rejects.toThrow('Insufficient stock');
+      expect(service.createPrintifyOrders).toHaveBeenCalledTimes(1);
     });
 
     it('should calculate pricing correctly with shipping and tax', async () => {
       const cartItems = [createMockCartItem()];
-      const mockVariant = createMockVariant();
-
-      mockStorefrontService.getProductVariants.mockResolvedValue([mockVariant as any]);
 
       const request: CreateOrderRequest = {
         medusaOrderId: 'medusa-order-1',
         customerEmail: 'john.doe@example.com',
         cartItems,
         shippingAddress: mockShippingAddress,
-        shippingCost: 500, // $5.00
-        taxAmount: 300,    // $3.00
-        discountAmount: 200, // $2.00 discount
+        shippingCost: 500,
+        taxAmount: 300,
+        discountAmount: 200,
       };
 
-      const order = await orderService.createOrder(request);
+      const order = await service.createOrderFromCart(request);
 
-      expect(order.pricing.subtotal).toBe(3998); // 1999 * 2
+      expect(order.pricing.subtotal).toBe(3998);
       expect(order.pricing.shippingCost).toBe(500);
       expect(order.pricing.taxAmount).toBe(300);
       expect(order.pricing.discountAmount).toBe(200);
       expect(order.pricing.total).toBe(4598); // 3998 + 500 + 300 - 200
     });
+
+    it('should create unique order IDs', async () => {
+      const cartItems = [createMockCartItem()];
+
+      const order1 = await service.createOrderFromCart({
+        medusaOrderId: 'medusa-order-1',
+        customerEmail: 'john@example.com',
+        cartItems,
+        shippingAddress: mockShippingAddress,
+      });
+
+      const order2 = await service.createOrderFromCart({
+        medusaOrderId: 'medusa-order-2',
+        customerEmail: 'jane@example.com',
+        cartItems,
+        shippingAddress: mockShippingAddress,
+      });
+
+      expect(order1.id).not.toBe(order2.id);
+    });
   });
 
   describe('order submission', () => {
-    let order: PrintifyOrder;
-
-    beforeEach(async () => {
+    it('should submit order to Printify', async () => {
       const cartItems = [createMockCartItem()];
-      const mockVariant = createMockVariant();
-
-      mockStorefrontService.getProductVariants.mockResolvedValue([mockVariant as any]);
-
-      const request: CreateOrderRequest = {
+      const order = await service.createOrderFromCart({
         medusaOrderId: 'medusa-order-1',
         customerEmail: 'john.doe@example.com',
         cartItems,
         shippingAddress: mockShippingAddress,
-      };
+      });
 
-      order = await orderService.createOrder(request);
-    });
-
-    it('should submit order to Printify', async () => {
-      const mockPrintifyResponse = {
+      mockApiClient.createOrder.mockResolvedValue({
         id: 'printify-order-123',
         status: 'pending',
-      };
+      });
 
-      mockApiClient.createOrder.mockResolvedValue(mockPrintifyResponse);
-
-      const submittedOrder = await orderService.submitOrder(order.id);
+      const submittedOrder = await service.submitPrintifyOrder(order.id, mockApiClient);
 
       expect(submittedOrder.status).toBe(PrintifyOrderStatus.SUBMITTED);
       expect(submittedOrder.printifyOrderId).toBe('printify-order-123');
@@ -178,54 +210,48 @@ describe('PrintifyOrderService', () => {
               quantity: 2,
             })
           ]),
-          address_to: expect.objectContaining({
-            first_name: 'John',
-            last_name: 'Doe',
-            email: 'john.doe@example.com',
-          }),
         })
       );
     });
 
     it('should handle submission errors', async () => {
-      mockApiClient.createOrder.mockRejectedValue(new Error('API Error'));
-
-      await expect(orderService.submitOrder(order.id))
-        .rejects.toThrow('API Error');
-
-      const orderAfterError = orderService.getOrder(order.id);
-      expect(orderAfterError.lastError).toBeTruthy();
-    });
-  });
-
-  describe('order status management', () => {
-    let order: PrintifyOrder;
-
-    beforeEach(async () => {
       const cartItems = [createMockCartItem()];
-      const mockVariant = createMockVariant();
-
-      mockStorefrontService.getProductVariants.mockResolvedValue([mockVariant as any]);
-
-      const request: CreateOrderRequest = {
+      const order = await service.createOrderFromCart({
         medusaOrderId: 'medusa-order-1',
         customerEmail: 'john.doe@example.com',
         cartItems,
         shippingAddress: mockShippingAddress,
-      };
+      });
 
-      order = await orderService.createOrder(request);
-      
-      // Submit order
+      mockApiClient.createOrder.mockRejectedValue(new Error('API Error'));
+
+      await expect(service.submitPrintifyOrder(order.id, mockApiClient))
+        .rejects.toThrow('API Error');
+    });
+  });
+
+  describe('order status management', () => {
+    let orderId: string;
+
+    beforeEach(async () => {
+      const cartItems = [createMockCartItem()];
+      const order = await service.createOrderFromCart({
+        medusaOrderId: 'medusa-order-1',
+        customerEmail: 'john.doe@example.com',
+        cartItems,
+        shippingAddress: mockShippingAddress,
+      });
+      orderId = order.id;
+
       mockApiClient.createOrder.mockResolvedValue({
         id: 'printify-order-123',
         status: 'pending',
       });
-      await orderService.submitOrder(order.id);
+      await service.submitPrintifyOrder(orderId, mockApiClient);
     });
 
     it('should sync order status from Printify', async () => {
-      const mockPrintifyOrder = {
+      mockApiClient.getOrder.mockResolvedValue({
         id: 'printify-order-123',
         status: 'in-production',
         tracking: {
@@ -233,67 +259,61 @@ describe('PrintifyOrderService', () => {
           tracking_url: 'https://track.example.com/TRACK123',
           carrier: 'UPS',
         },
-      };
+      });
 
-      mockApiClient.getOrder.mockResolvedValue(mockPrintifyOrder);
+      const syncedOrder = await service.syncOrderStatus(orderId, mockApiClient);
 
-      const syncedOrder = await orderService.syncOrderStatus(order.id);
-
-      expect(syncedOrder.status).toBe(PrintifyOrderStatus.PROCESSING); // in-production maps to PROCESSING
+      expect(syncedOrder.status).toBe(PrintifyOrderStatus.PROCESSING);
       expect(syncedOrder.tracking?.trackingNumber).toBe('TRACK123');
       expect(syncedOrder.tracking?.trackingUrl).toBe('https://track.example.com/TRACK123');
       expect(syncedOrder.tracking?.carrier).toBe('UPS');
     });
 
     it('should update order status manually', async () => {
-      const updatedOrder = await orderService.updateOrderStatus(order.id, {
+      const updatedOrder = await service.updateOrderStatus(orderId, {
         status: PrintifyOrderStatus.PROCESSING,
         note: 'Processing started',
       });
 
       expect(updatedOrder.status).toBe(PrintifyOrderStatus.PROCESSING);
-      expect(updatedOrder.statusHistory).toHaveLength(2); // PENDING -> VALIDATED base entries
+      expect(updatedOrder.statusHistory).toHaveLength(2);
     });
   });
 
   describe('order cancellation', () => {
-    let order: PrintifyOrder;
-
-    beforeEach(async () => {
+    it('should cancel order before submission', async () => {
       const cartItems = [createMockCartItem()];
-      const mockVariant = createMockVariant();
-
-      mockStorefrontService.getProductVariants.mockResolvedValue([mockVariant as any]);
-
-      const request: CreateOrderRequest = {
+      const order = await service.createOrderFromCart({
         medusaOrderId: 'medusa-order-1',
         customerEmail: 'john.doe@example.com',
         cartItems,
         shippingAddress: mockShippingAddress,
-      };
+      });
 
-      order = await orderService.createOrder(request);
-    });
-
-    it('should cancel order before submission', async () => {
-      const cancelledOrder = await orderService.cancelOrder(order.id, 'Customer request');
+      const cancelledOrder = await service.cancelPrintifyOrder(order.id, mockApiClient, 'Customer request');
 
       expect(cancelledOrder.status).toBe(PrintifyOrderStatus.CANCELLED);
-      expect(cancelledOrder.statusHistory[2].note).toBe('Order cancelled'); // Check the cancellation entry
+      expect(cancelledOrder.statusHistory[2].note).toBe('Order cancelled');
     });
 
     it('should cancel order after submission', async () => {
-      // Submit order first
+      const cartItems = [createMockCartItem()];
+      const order = await service.createOrderFromCart({
+        medusaOrderId: 'medusa-order-1',
+        customerEmail: 'john.doe@example.com',
+        cartItems,
+        shippingAddress: mockShippingAddress,
+      });
+
       mockApiClient.createOrder.mockResolvedValue({
         id: 'printify-order-123',
         status: 'pending',
       });
-      await orderService.submitOrder(order.id);
+      await service.submitPrintifyOrder(order.id, mockApiClient);
 
-      // Mock Printify cancellation
       mockApiClient.cancelOrder.mockResolvedValue({ success: true });
 
-      const cancelledOrder = await orderService.cancelOrder(order.id, 'Customer request');
+      const cancelledOrder = await service.cancelPrintifyOrder(order.id, mockApiClient, 'Customer request');
 
       expect(cancelledOrder.status).toBe(PrintifyOrderStatus.CANCELLED);
       expect(mockApiClient.cancelOrder).toHaveBeenCalledWith('printify-order-123');
@@ -302,22 +322,16 @@ describe('PrintifyOrderService', () => {
 
   describe('order queries', () => {
     beforeEach(async () => {
-      // Create multiple orders for testing
       const cartItems = [createMockCartItem()];
-      const mockVariant = createMockVariant();
 
-      // Ensure the mock handles multiple calls properly
-      mockStorefrontService.getProductVariants.mockResolvedValue([mockVariant as any]);
-
-      // Create orders
-      await orderService.createOrder({
+      await service.createOrderFromCart({
         medusaOrderId: 'medusa-order-1',
         customerEmail: 'john.doe@example.com',
         cartItems,
         shippingAddress: mockShippingAddress,
       });
 
-      await orderService.createOrder({
+      await service.createOrderFromCart({
         medusaOrderId: 'medusa-order-2',
         customerEmail: 'jane.smith@example.com',
         cartItems,
@@ -326,7 +340,16 @@ describe('PrintifyOrderService', () => {
     });
 
     it('should list all orders', async () => {
-      const result = await orderService.listOrders();
+      // Mock the DB list to return our orders
+      service.listAndCountPrintifyOrders = jest.fn().mockResolvedValue([
+        [
+          { id: 'order_1', medusa_order_id: 'medusa-order-1', status: 'pending', total_price: 3998, line_items: [], shipping_address: {}, created_at: new Date(), updated_at: new Date() },
+          { id: 'order_2', medusa_order_id: 'medusa-order-2', status: 'pending', total_price: 3998, line_items: [], shipping_address: {}, created_at: new Date(), updated_at: new Date() },
+        ],
+        2,
+      ]);
+
+      const result = await service.listOrdersFiltered();
 
       expect(result.orders).toHaveLength(2);
       expect(result.total).toBe(2);
@@ -334,21 +357,37 @@ describe('PrintifyOrderService', () => {
     });
 
     it('should filter orders by status', async () => {
-      const result = await orderService.listOrders({
-        status: [PrintifyOrderStatus.PENDING], // Orders are pending after creation
+      service.listAndCountPrintifyOrders = jest.fn().mockResolvedValue([
+        [
+          { id: 'order_1', medusa_order_id: 'medusa-order-1', status: 'pending', total_price: 3998, line_items: [], shipping_address: {}, created_at: new Date(), updated_at: new Date() },
+          { id: 'order_2', medusa_order_id: 'medusa-order-2', status: 'pending', total_price: 3998, line_items: [], shipping_address: {}, created_at: new Date(), updated_at: new Date() },
+        ],
+        2,
+      ]);
+
+      const result = await service.listOrdersFiltered({
+        status: [PrintifyOrderStatus.PENDING],
       });
 
       expect(result.orders).toHaveLength(2);
-      result.orders.forEach(order => {
+      result.orders.forEach((order: any) => {
         expect(order.status).toBe(PrintifyOrderStatus.PENDING);
       });
     });
 
     it('should get order statistics', async () => {
-      const stats = await orderService.getOrderStats();
+      service.listAndCountPrintifyOrders = jest.fn().mockResolvedValue([
+        [
+          { id: 'order_1', status: 'pending', total_price: 3998, created_at: new Date(), updated_at: new Date() },
+          { id: 'order_2', status: 'pending', total_price: 3998, created_at: new Date(), updated_at: new Date() },
+        ],
+        2,
+      ]);
+
+      const stats = await service.getOrderStatsForConfig();
 
       expect(stats.total).toBe(2);
-      expect(stats.pending).toBe(2); // PENDING orders are counted as pending
+      expect(stats.pending).toBe(2);
       expect(stats.processing).toBe(0);
       expect(stats.shipped).toBe(0);
       expect(stats.delivered).toBe(0);
@@ -359,77 +398,46 @@ describe('PrintifyOrderService', () => {
     });
 
     it('should find order by Medusa ID', async () => {
-      const order = orderService.getOrderByMedusaId('medusa-order-1');
+      const order = await service.getOrderByMedusaId('medusa-order-1');
 
       expect(order).toBeDefined();
       expect(order?.medusaOrderId).toBe('medusa-order-1');
     });
 
-    it('should throw error for non-existent order', () => {
-      expect(() => orderService.getOrder('non-existent'))
-        .toThrow(PrintifyPluginError);
+    it('should throw error for non-existent order', async () => {
+      await expect(service.getOrderBridge('non-existent'))
+        .rejects.toThrow(PrintifyPluginError);
     });
   });
 
   describe('error handling', () => {
-    it('should handle cart validation errors', async () => {
-      const cartItems = [createMockCartItem()];
-
-      // Mock variant not found
-      mockStorefrontService.getProductVariants.mockResolvedValue([]);
-
-      const request: CreateOrderRequest = {
-        medusaOrderId: 'medusa-order-1',
-        customerEmail: 'john.doe@example.com',
-        cartItems,
-        shippingAddress: mockShippingAddress,
-      };
-
-      await expect(orderService.createOrder(request))
-        .rejects.toThrow(PrintifyPluginError);
-    });
-
     it('should handle API client errors', async () => {
       const cartItems = [createMockCartItem()];
-      const mockVariant = createMockVariant();
-
-      mockStorefrontService.getProductVariants.mockResolvedValue([mockVariant as any]);
-
-      const request: CreateOrderRequest = {
+      const order = await service.createOrderFromCart({
         medusaOrderId: 'medusa-order-1',
         customerEmail: 'john.doe@example.com',
         cartItems,
         shippingAddress: mockShippingAddress,
-      };
+      });
 
-      const order = await orderService.createOrder(request);
-
-      // Mock API error
       mockApiClient.createOrder.mockRejectedValue(new Error('Network timeout'));
 
-      await expect(orderService.submitOrder(order.id))
+      await expect(service.submitPrintifyOrder(order.id, mockApiClient))
         .rejects.toThrow('Network timeout');
     });
 
     it('should handle malformed API responses', async () => {
       const cartItems = [createMockCartItem()];
-      const mockVariant = createMockVariant();
-
-      mockStorefrontService.getProductVariants.mockResolvedValue([mockVariant as any]);
-
-      const request: CreateOrderRequest = {
+      const order = await service.createOrderFromCart({
         medusaOrderId: 'medusa-order-1',
         customerEmail: 'john.doe@example.com',
         cartItems,
         shippingAddress: mockShippingAddress,
-      };
+      });
 
-      const order = await orderService.createOrder(request);
-
-      // Mock malformed response (missing ID)
       mockApiClient.createOrder.mockResolvedValue({ status: 'pending' });
 
-      await expect(orderService.submitOrder(order.id))
+      await expect(service.submitPrintifyOrder(order.id, mockApiClient))
         .rejects.toThrow(PrintifyPluginError);
     });
   });

@@ -1,17 +1,16 @@
-import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { z } from 'zod';
-import { PrintifyOrderService, OrderListOptions } from '../../../../modules/printify/services/printify-order-service';
-import { PrintifyOrderStatus } from '../../../../modules/printify/models/printify-order';
-import { PrintifyCartItem } from '../../../../modules/printify/models/printify-cart-item';
-import { PrintifyApiClient } from '../../../../modules/printify/services/printify-api-client';
-import { StorefrontProductService } from '../../../../modules/printify/services/storefront-product-service';
-import { logger } from '../../../../modules/printify/utils/logger';
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { z } from "zod"
+import type PrintifyModuleService from "../../../../modules/printify/service"
+import { PRINTIFY_MODULE } from "../../../../modules/printify"
+import { PrintifyOrderStatus } from "../../../../modules/printify/models/printify-order"
+import { PrintifyCartItem } from "../../../../modules/printify/models/printify-cart-item"
+import { logger } from "../../../../modules/printify/utils/logger"
+import type { OrderListOptions } from "../../../../modules/printify/service"
 
-// Request validation schemas
 const createOrderSchema = z.object({
-  medusa_order_id: z.string().min(1, 'Medusa order ID is required'),
+  medusa_order_id: z.string().min(1, "Medusa order ID is required"),
   customer_id: z.string().optional(),
-  customer_email: z.string().email('Valid customer email is required'),
+  customer_email: z.string().email("Valid customer email is required"),
   cart_items: z.array(z.object({
     id: z.string(),
     product_id: z.string(),
@@ -21,7 +20,7 @@ const createOrderSchema = z.object({
     quantity: z.number().min(1),
     unit_price: z.number().min(0),
     options: z.record(z.any()).optional(),
-  })).min(1, 'At least one cart item is required'),
+  })).min(1, "At least one cart item is required"),
   shipping_address: z.object({
     first_name: z.string(),
     last_name: z.string(),
@@ -38,30 +37,14 @@ const createOrderSchema = z.object({
   shipping_cost: z.number().min(0).optional(),
   tax_amount: z.number().min(0).optional(),
   discount_amount: z.number().min(0).optional(),
-});
+})
 
-// Initialize services (in a real app, these would be injected from DI container)
-const getOrderService = (): PrintifyOrderService => {
-  const apiClient = new PrintifyApiClient({
-    apiKey: process.env.PRINTIFY_API_KEY || 'dummy-key',
-    shopId: process.env.PRINTIFY_SHOP_ID || 'dummy-shop',
-  });
-  const storefrontService = new StorefrontProductService(apiClient);
-  return new PrintifyOrderService(apiClient, storefrontService);
-};
-const apiLogger = logger.child('AdminOrderAPI');
+const apiLogger = logger.child("AdminOrderAPI")
 
-/**
- * GET /admin/printify/orders
- * List all Printify orders with filtering options
- */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.auth_context?.actor_id || 'default-store';
-    
-    apiLogger.info('Listing orders', { storeId, query: req.query });
+    const printifyService: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
 
-    // Parse query parameters
     const {
       status,
       customer_id,
@@ -69,44 +52,37 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       date_to,
       limit = 20,
       offset = 0,
-      sort_by = 'createdAt',
-      sort_order = 'desc',
-    } = req.query;
+      sort_by = "createdAt",
+      sort_order = "desc",
+    } = req.query
 
-    // Build options
     const options: OrderListOptions = {
       limit: Number(limit),
       offset: Number(offset),
-      sortBy: sort_by as 'createdAt' | 'updatedAt' | 'status',
-      sortOrder: sort_order as 'asc' | 'desc',
-    };
+      sortBy: sort_by as "createdAt" | "updatedAt" | "status",
+      sortOrder: sort_order as "asc" | "desc",
+    }
 
-    // Add status filter if provided
     if (status) {
-      const statusArray = Array.isArray(status) ? status : [status];
-      options.status = statusArray.map(s => s as PrintifyOrderStatus);
+      const statusArray = Array.isArray(status) ? status : [status]
+      options.status = statusArray.map((s) => s as PrintifyOrderStatus)
     }
-
-    // Add customer filter if provided
     if (customer_id) {
-      options.customerId = customer_id as string;
+      options.customerId = customer_id as string
     }
-
-    // Add date filters if provided
     if (date_from) {
-      options.dateFrom = new Date(date_from as string);
+      options.dateFrom = new Date(date_from as string)
     }
     if (date_to) {
-      options.dateTo = new Date(date_to as string);
+      options.dateTo = new Date(date_to as string)
     }
 
-    const orderService = getOrderService();
-    const result = await orderService.listOrders(options);
+    const result = await printifyService.listOrdersFiltered(options)
 
     res.json({
       success: true,
       data: {
-        orders: result.orders.map(order => ({
+        orders: result.orders.map((order) => ({
           id: order.id,
           medusa_order_id: order.medusaOrderId,
           printify_order_id: order.printifyOrderId,
@@ -120,72 +96,65 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
           shipping_address: order.shippingAddress,
           tracking: order.tracking,
           last_error: order.lastError,
-          retry_count: 0, // TODO: Add retry_count field to DML model
+          retry_count: 0,
         })),
         count: result.total,
         offset: Number(offset),
         limit: Number(limit),
         has_more: result.hasMore,
       },
-    });
+    })
   } catch (error) {
-    apiLogger.error('Failed to list orders', error as Error);
-    
+    apiLogger.error("Failed to list orders", error as Error)
     res.status(500).json({
       success: false,
-      error: 'Internal server error',
-      message: 'Failed to retrieve orders',
-    });
+      error: "Internal server error",
+      message: "Failed to retrieve orders",
+    })
   }
 }
 
-/**
- * POST /admin/printify/orders
- * Create a new Printify order from cart data
- */
 export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.auth_context?.actor_id || 'default-store';
-    
-    apiLogger.info('Creating order', { storeId });
+    const printifyService: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
 
-    // Validate request body
-    const validationResult = createOrderSchema.safeParse(req.body);
+    const validationResult = createOrderSchema.safeParse(req.body)
     if (!validationResult.success) {
       res.status(400).json({
         success: false,
-        error: 'Validation failed',
-        message: 'Invalid request data',
+        error: "Validation failed",
+        message: "Invalid request data",
         details: validationResult.error.errors,
-      });
-      return;
+      })
+      return
     }
 
-    const data = validationResult.data;
+    const data = validationResult.data
 
-    // Convert request cart items to PrintifyCartItem instances
-    const cartItems = data.cart_items.map(item => new PrintifyCartItem({
-      id: item.id,
-      cartId: 'admin-created',
-      productId: item.product_id,
-      variantId: item.variant_id,
-      printifyProductId: item.printify_product_id,
-      printifyVariantId: item.printify_variant_id,
-      quantity: item.quantity,
-      options: item.options || {},
-      pricing: {
-        unitPrice: item.unit_price,
-        totalPrice: item.unit_price * item.quantity,
-        currency: 'USD',
-      },
-    }));
+    const cartItems = data.cart_items.map(
+      (item) =>
+        new PrintifyCartItem({
+          id: item.id,
+          cartId: "admin-created",
+          productId: item.product_id,
+          variantId: item.variant_id,
+          printifyProductId: item.printify_product_id,
+          printifyVariantId: item.printify_variant_id,
+          quantity: item.quantity,
+          options: item.options || {},
+          pricing: {
+            unitPrice: item.unit_price,
+            totalPrice: item.unit_price * item.quantity,
+            currency: "USD",
+          },
+        }),
+    )
 
-    const orderService = getOrderService();
-    const order = await orderService.createOrder({
+    const order = await printifyService.createOrderFromCart({
       medusaOrderId: data.medusa_order_id,
       customerId: data.customer_id,
       customerEmail: data.customer_email,
-      cartItems: cartItems,
+      cartItems,
       shippingAddress: {
         first_name: data.shipping_address.first_name,
         last_name: data.shipping_address.last_name,
@@ -202,9 +171,7 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
       shippingCost: data.shipping_cost,
       taxAmount: data.tax_amount,
       discountAmount: data.discount_amount,
-    });
-
-    apiLogger.info('Order created successfully', { orderId: order.id });
+    })
 
     res.status(201).json({
       success: true,
@@ -220,14 +187,13 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
           updated_at: order.updatedAt,
         },
       },
-    });
+    })
   } catch (error) {
-    apiLogger.error('Failed to create order', error as Error);
-    
+    apiLogger.error("Failed to create order", error as Error)
     res.status(500).json({
       success: false,
-      error: 'Internal server error',
-      message: 'Failed to create order',
-    });
+      error: "Internal server error",
+      message: "Failed to create order",
+    })
   }
 }
