@@ -2,6 +2,8 @@ import crypto from "crypto"
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import type PrintifyModuleService from "../../../modules/printify/service"
 import { PRINTIFY_MODULE } from "../../../modules/printify"
+import { PrintifyApiClient } from "../../../modules/printify/services/printify-api-client"
+import { PrintifyOrderStatus } from "../../../modules/printify/models/printify-order"
 import { logger } from "../../../modules/printify/utils/logger"
 import type { PrintifyWebhookEvent } from "./types"
 
@@ -17,6 +19,7 @@ function verifySignature(
     .createHmac("sha256", secret)
     .update(body, "utf8")
     .digest("hex")
+  if (signature.length !== expected.length) return false
   return crypto.timingSafeEqual(
     Buffer.from(signature),
     Buffer.from(expected),
@@ -62,7 +65,23 @@ export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<voi
         break
 
       case "product:updated":
-        await handleProductUpdated(printifyService, event)
+        await handleProductUpdated(printifyService, event, config)
+        break
+
+      case "product:deleted":
+        await handleProductDeleted(printifyService, event)
+        break
+
+      case "order:sent-to-production":
+        await handleOrderSentToProduction(printifyService, event)
+        break
+
+      case "order:shipment:delivered":
+        await handleOrderDelivered(printifyService, event)
+        break
+
+      case "shop:disconnected":
+        handleShopDisconnected(event)
         break
 
       default:
@@ -135,12 +154,13 @@ async function handleOrderShipped(
 async function handleProductUpdated(
   service: PrintifyModuleService,
   event: PrintifyWebhookEvent & { type: "product:updated" },
+  config: any,
 ): Promise<void> {
   const printifyProductId = event.resource.data.id
 
   webhookLogger.info("Product update received", { printifyProductId })
 
-  // Find the product locally and mark it for re-sync
+  // Find the product locally
   const [existing] = await service.listPrintifyProducts({
     filters: { printify_product_id: printifyProductId },
   })
@@ -150,7 +170,42 @@ async function handleProductUpdated(
     return
   }
 
-  // Clear last_sync_at to force re-sync on next cycle
+  // Attempt immediate sync if config is available
+  if (config?.printify_api_key && config?.printify_shop_id) {
+    try {
+      const apiClient = new PrintifyApiClient({
+        apiKey: config.printify_api_key,
+        shopId: config.printify_shop_id,
+      })
+
+      const freshData = await apiClient.getProduct(printifyProductId)
+
+      await service.updatePrintifyProducts([
+        {
+          id: existing.id,
+          title: freshData.title,
+          description: freshData.description,
+          tags: freshData.tags as any,
+          images: freshData.images as any,
+          printify_data: freshData as any,
+          last_sync_at: new Date(),
+        },
+      ] as any)
+
+      webhookLogger.info("Product immediately synced", {
+        productId: existing.id,
+        printifyProductId,
+      })
+      return
+    } catch (error) {
+      webhookLogger.warn("Immediate sync failed, falling back to mark-for-resync", {
+        printifyProductId,
+        error: (error as Error).message,
+      })
+    }
+  }
+
+  // Fallback: clear last_sync_at to force re-sync on next cycle
   await service.updatePrintifyProducts([
     {
       id: existing.id,
@@ -162,4 +217,84 @@ async function handleProductUpdated(
     productId: existing.id,
     printifyProductId,
   })
+}
+
+async function handleProductDeleted(
+  service: PrintifyModuleService,
+  event: PrintifyWebhookEvent & { type: "product:deleted" },
+): Promise<void> {
+  const printifyProductId = event.resource.data.id
+
+  webhookLogger.info("Product deletion received", { printifyProductId })
+
+  const [existing] = await service.listPrintifyProducts({
+    filters: { printify_product_id: printifyProductId },
+  })
+
+  if (!existing) {
+    webhookLogger.info("Deleted product not tracked locally, skipping", { printifyProductId })
+    return
+  }
+
+  await service.disableProduct(existing.id, "webhook", "Product deleted on Printify")
+
+  webhookLogger.info("Product disabled after Printify deletion", {
+    productId: existing.id,
+    printifyProductId,
+  })
+}
+
+async function handleOrderSentToProduction(
+  service: PrintifyModuleService,
+  event: PrintifyWebhookEvent & { type: "order:sent-to-production" },
+): Promise<void> {
+  const printifyOrderId = event.resource.data.id
+  const order = await service.getOrderByPrintifyId(printifyOrderId)
+
+  if (!order) {
+    webhookLogger.warn("Order not found for sent-to-production webhook", { printifyOrderId })
+    return
+  }
+
+  await service.updateOrderStatus(order.id, {
+    status: PrintifyOrderStatus.PROCESSING,
+    note: "Order sent to production via webhook",
+  })
+
+  webhookLogger.info("Order marked as processing", {
+    orderId: order.id,
+    printifyOrderId,
+  })
+}
+
+async function handleOrderDelivered(
+  service: PrintifyModuleService,
+  event: PrintifyWebhookEvent & { type: "order:shipment:delivered" },
+): Promise<void> {
+  const printifyOrderId = event.resource.data.id
+  const order = await service.getOrderByPrintifyId(printifyOrderId)
+
+  if (!order) {
+    webhookLogger.warn("Order not found for delivery webhook", { printifyOrderId })
+    return
+  }
+
+  await service.updateOrderStatus(order.id, {
+    status: PrintifyOrderStatus.DELIVERED,
+    note: "Shipment delivered via webhook",
+  })
+
+  webhookLogger.info("Order marked as delivered", {
+    orderId: order.id,
+    printifyOrderId,
+  })
+}
+
+function handleShopDisconnected(
+  event: PrintifyWebhookEvent & { type: "shop:disconnected" },
+): void {
+  webhookLogger.warn("Shop disconnected event received", {
+    shopId: event.resource.data.shop_id,
+  })
+  // No action needed — config stays intact for potential reconnection
 }

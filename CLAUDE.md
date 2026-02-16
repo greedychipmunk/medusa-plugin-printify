@@ -15,7 +15,7 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Order Processing**: Automatic order submission to Printify, real-time status sync, tracking management
 - **Shopping Cart Integration**: Add Printify products to cart, validation, custom options
 - **Admin Dashboard**: Configuration management, order interface, analytics
-- **Modern Architecture**: DML entities, TypeScript, comprehensive test coverage (137 tests)
+- **Modern Architecture**: DML entities, TypeScript, comprehensive test coverage (151 tests)
 
 ## Architecture & Modernization Status
 
@@ -23,7 +23,7 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Modern Data Models**: All models converted to MedusaJS v2 DML patterns with full type safety
 - **Service Layer**: Updated services using DML entities while maintaining legacy API compatibility
 - **Bridge Pattern**: Seamless backward compatibility ensuring zero breaking changes
-- **Test Coverage**: 137/137 tests passing across 10 test suites
+- **Test Coverage**: 151/151 tests passing across 12 test suites
 
 ### ✅ **Phase 5 Complete**: API Routes Modernization
 - **Modern Import Patterns**: All routes using `@medusajs/framework/http` imports
@@ -37,6 +37,14 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Order Detail Page**: Shows linked Medusa order badge with display ID
 - **Submit Workflow**: `updateOrderRecordStep` creates module link to Medusa order
 - **Test Coverage**: 137/137 tests across 10 suites — link service, cart validation, order enrichment
+
+### ✅ **Phase 7 Complete**: Webhook Enhancements
+- **Webhook Registration API**: Admin CRUD endpoints for managing Printify webhooks (`GET/POST /admin/printify/webhooks`, `DELETE /admin/printify/webhooks/:id`)
+- **API Client Methods**: `listWebhooks()`, `createWebhook()`, `deleteWebhook()` on `PrintifyApiClient`
+- **Expanded Events**: 7 webhook event types handled — `order:status-changed`, `order:shipped`, `product:updated`, `product:deleted`, `order:sent-to-production`, `order:shipment:delivered`, `shop:disconnected`
+- **Immediate Product Sync**: `product:updated` now fetches fresh data from Printify API immediately instead of just marking for re-sync
+- **Proper Test Coverage**: 16 webhook handler tests with mocked services, 5 API client tests, 5 admin route tests
+- **Test Coverage**: 151/151 tests across 12 suites
 
 ## Key Components
 
@@ -133,7 +141,7 @@ export class PrintifyOrderService {
 ## Testing Requirements
 
 ### Test Coverage
-- **137 tests total** across 5 test suites
+- **151 tests total** across 12 test suites
 - **100% success rate** required for any changes
 - **Critical path coverage** for all user-facing functionality
 - **DML model validation** with both entity and bridge patterns
@@ -146,14 +154,16 @@ tests/
 │   │   ├── admin-endpoints.test.ts              # 28 API tests
 │   │   ├── cart-validation.test.ts              # 6 cart validation tests
 │   │   ├── storefront-endpoints.test.ts         # 14 storefront tests
-│   │   └── webhook-endpoints.test.ts            # 10 webhook tests
+│   │   ├── webhook-endpoints.test.ts             # 16 webhook handler tests
+│   │   └── webhook-admin-endpoints.test.ts      # 5 admin webhook tests
 │   ├── models/
 │   │   ├── printify-configuration-dml.test.ts   # 13 model tests
 │   │   └── printify-product-dml.test.ts         # 14 model tests
 │   ├── services/
 │   │   ├── printify-cart-service.test.ts        # 6 service tests
 │   │   ├── printify-link-service.test.ts        # 14 link/module tests
-│   │   └── printify-order-service.test.ts       # 19 service tests
+│   │   ├── printify-order-service.test.ts        # 19 service tests
+│   │   └── printify-api-client-webhooks.test.ts # 5 API client webhook tests
 │   └── ...
 └── setup.ts
 ```
@@ -258,6 +268,11 @@ POST   /admin/printify/products/bulk    # Bulk enable/disable operations
 POST   /admin/printify/products/:id/enable   # Enable single product
 POST   /admin/printify/products/:id/disable  # Disable single product
 
+Webhooks:
+GET    /admin/printify/webhooks         # List registered webhooks
+POST   /admin/printify/webhooks         # Register new webhook
+DELETE /admin/printify/webhooks/:id     # Remove webhook
+
 Orders:
 GET    /admin/printify/orders           # List orders with filters
 POST   /admin/printify/orders           # Create order manually
@@ -322,7 +337,7 @@ npm start
 
 ### Common Issues
 1. **TypeScript Compilation Errors**: Ensure using `@medusajs/framework` imports
-2. **Test Failures**: Run `npm test` - all 137 tests must pass
+2. **Test Failures**: Run `npm test` - all 151 tests must pass
 3. **DML Entity Issues**: Check bridge pattern implementation
 4. **API Connection**: Verify Printify API key and shop ID
 5. **Database**: Ensure migrations are run for DML tables
