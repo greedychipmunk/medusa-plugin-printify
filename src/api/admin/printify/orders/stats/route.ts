@@ -1,50 +1,27 @@
-import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { PrintifyOrderService } from '../../../../../modules/printify/services/printify-order-service';
-import { PrintifyApiClient } from '../../../../../modules/printify/services/printify-api-client';
-import { StorefrontProductService } from '../../../../../modules/printify/services/storefront-product-service';
-import { logger } from '../../../../../modules/printify/utils/logger';
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import type PrintifyModuleService from "../../../../../modules/printify/service"
+import { PRINTIFY_MODULE } from "../../../../../modules/printify"
+import { logger } from "../../../../../modules/printify/utils/logger"
 
-// Initialize services
-const getOrderService = (): PrintifyOrderService => {
-  const apiClient = new PrintifyApiClient({
-    apiKey: process.env.PRINTIFY_API_KEY || 'dummy-key',
-    shopId: process.env.PRINTIFY_SHOP_ID || 'dummy-shop',
-  });
-  const storefrontService = new StorefrontProductService(apiClient);
-  return new PrintifyOrderService(apiClient, storefrontService);
-};
+const apiLogger = logger.child("AdminOrderStatsAPI")
 
-const apiLogger = logger.child('AdminOrderStatsAPI');
-
-/**
- * GET /admin/printify/orders/stats
- * Get order statistics and analytics
- */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
-    const storeId = req.auth_context?.actor_id || 'default-store';
-    
-    apiLogger.info('Getting order statistics', { storeId });
+    const printifyService: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
 
-    // Parse query parameters for date range
-    const {
-      date_from,
-      date_to,
-    } = req.query;
+    const { date_from, date_to } = req.query
 
-    const orderService = getOrderService();
-    
-    let dateFrom: Date | undefined;
-    let dateTo: Date | undefined;
+    let dateFrom: Date | undefined
+    let dateTo: Date | undefined
 
     if (date_from) {
-      dateFrom = new Date(date_from as string);
+      dateFrom = new Date(date_from as string)
     }
     if (date_to) {
-      dateTo = new Date(date_to as string);
+      dateTo = new Date(date_to as string)
     }
 
-    const stats = await orderService.getOrderStats();
+    const stats = await printifyService.getOrderStatsForConfig()
 
     res.json({
       success: true,
@@ -66,14 +43,13 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
           },
         },
       },
-    });
+    })
   } catch (error) {
-    apiLogger.error('Failed to get order statistics', error as Error);
-    
+    apiLogger.error("Failed to get order statistics", error as Error)
     res.status(500).json({
       success: false,
-      error: 'Internal server error',
-      message: 'Failed to retrieve order statistics',
-    });
+      error: "Internal server error",
+      message: "Failed to retrieve order statistics",
+    })
   }
 }
