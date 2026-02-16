@@ -40,6 +40,8 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
         title: product?.title,
         enabled: product?.enabled,
         updated_at: product?.updated_at,
+        medusa_product: null,
+        medusa_product_unlinked: true,
       },
     })
   } catch (error) {

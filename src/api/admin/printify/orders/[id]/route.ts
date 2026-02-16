@@ -24,6 +24,22 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
 
     const order = await printifyService.getOrderBridge(orderId)
 
+    // Fetch linked Medusa order data if available
+    let medusaOrder: any = null
+    try {
+      const enriched = await printifyService.getOrderWithMedusaData(orderId)
+      if (enriched?.order) {
+        medusaOrder = {
+          id: enriched.order.id,
+          display_id: enriched.order.display_id,
+          status: enriched.order.status,
+          email: enriched.order.email,
+        }
+      }
+    } catch {
+      // Non-fatal: linked data may not be available
+    }
+
     res.json({
       success: true,
       data: {
@@ -59,6 +75,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
           submitted_at: order.submittedAt,
           last_error: order.lastError,
           retry_count: 0,
+          medusa_order: medusaOrder,
         },
       },
     })

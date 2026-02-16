@@ -26,6 +26,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
         title: product.title,
         description: product.description,
         enabled: product.enabled,
+        medusa_product_id: product.medusa_product_id || null,
         created_at: product.created_at,
         updated_at: product.updated_at,
         url: `/products/${product.id}`,

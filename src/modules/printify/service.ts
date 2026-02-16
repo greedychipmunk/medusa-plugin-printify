@@ -6,7 +6,8 @@
  * all business logic previously spread across separate services.
  */
 
-import { MedusaService } from "@medusajs/framework/utils"
+import { MedusaService, Modules, ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import { PRINTIFY_MODULE } from "./index"
 import PrintifyConfiguration from "./models/printify-configuration"
 import PrintifyProduct from "./models/printify-product"
 import PrintifyOrder from "./models/printify-order"
@@ -168,6 +169,11 @@ class PrintifyModuleService extends MedusaService({
   // In-memory store for cart (session-scoped/ephemeral)
   private cartItems: Map<string, PrintifyCartItem[]> = new Map()
 
+  // Access the DI container injected by MedusaService at runtime
+  private get container(): Record<string, any> {
+    return (this as any).__container__
+  }
+
   // ── Configuration Business Logic ────────────────────────────────
 
   async getConfigurationByStoreId(storeId: string) {
@@ -315,6 +321,23 @@ class PrintifyModuleService extends MedusaService({
       reason,
     })
 
+    // Create Medusa catalog product and link if not already linked
+    try {
+      if (!product.medusa_product_id) {
+        const medusaProduct = await this.createMedusaProductFromPrintify(product)
+        await this.linkProductToMedusa(productId, medusaProduct.id)
+        this.log.info("Linked product to Medusa catalog", {
+          printifyProductId: productId,
+          medusaProductId: medusaProduct.id,
+        })
+      }
+    } catch (error) {
+      this.log.warn("Failed to create/link Medusa product (non-fatal)", {
+        productId,
+        error: (error as Error).message,
+      })
+    }
+
     return updated
   }
 
@@ -333,6 +356,35 @@ class PrintifyModuleService extends MedusaService({
       triggered_by: triggeredBy,
       reason,
     })
+
+    // Unlink from Medusa and remove auto-created product
+    try {
+      if (product.medusa_product_id) {
+        // Remove auto-created Medusa product if applicable
+        try {
+          const productService = this.container.resolve(Modules.PRODUCT) as any
+          const medusaProduct = await productService.retrieveProduct(product.medusa_product_id)
+          if (medusaProduct?.metadata?.printify_auto_created) {
+            await productService.deleteProducts([product.medusa_product_id])
+            this.log.info("Deleted auto-created Medusa product", {
+              medusaProductId: product.medusa_product_id,
+            })
+          }
+        } catch (error) {
+          this.log.warn("Failed to remove Medusa product (non-fatal)", {
+            medusaProductId: product.medusa_product_id,
+            error: (error as Error).message,
+          })
+        }
+
+        await this.unlinkProductFromMedusa(productId)
+      }
+    } catch (error) {
+      this.log.warn("Failed to unlink Medusa product (non-fatal)", {
+        productId,
+        error: (error as Error).message,
+      })
+    }
 
     return updated
   }
@@ -565,6 +617,21 @@ class PrintifyModuleService extends MedusaService({
       submittedAt: undefined,
       retryCount: 0,
       maxRetries: 3,
+    }
+
+    // Create link to Medusa order
+    try {
+      const link = this.container.resolve("link") as any
+      await link.create({
+        [PRINTIFY_MODULE]: { printify_order_id: created.id },
+        [Modules.ORDER]: { order_id: request.medusaOrderId },
+      })
+    } catch (error) {
+      this.log.warn("Failed to create order link (non-fatal)", {
+        orderId: created.id,
+        medusaOrderId: request.medusaOrderId,
+        error: (error as Error).message,
+      })
     }
 
     return new PrintifyOrderBridge(bridgeData)
@@ -1075,6 +1142,121 @@ class PrintifyModuleService extends MedusaService({
       apiKey: config.printify_api_key,
       shopId: config.printify_shop_id,
     })
+  }
+
+  // ── Module Link Methods ───────────────────────────────────────────
+
+  async linkProductToMedusa(printifyProductId: string, medusaProductId: string): Promise<void> {
+    this.log.info("Linking Printify product to Medusa product", { printifyProductId, medusaProductId })
+
+    const link = this.container.resolve("link") as any
+    await link.create({
+      [PRINTIFY_MODULE]: { printify_product_id: printifyProductId },
+      [Modules.PRODUCT]: { product_id: medusaProductId },
+    })
+
+    // Update text field for backward compatibility
+    await this.updatePrintifyProducts([
+      { id: printifyProductId, medusa_product_id: medusaProductId },
+    ])
+  }
+
+  async unlinkProductFromMedusa(printifyProductId: string): Promise<void> {
+    this.log.info("Unlinking Printify product from Medusa", { printifyProductId })
+
+    try {
+      const link = this.container.resolve("link") as any
+      await link.dismiss({
+        [PRINTIFY_MODULE]: { printify_product_id: printifyProductId },
+      })
+    } catch (error) {
+      this.log.warn("Failed to dismiss product link (may not exist)", {
+        printifyProductId,
+        error: (error as Error).message,
+      })
+    }
+
+    // Clear text field for backward compatibility
+    await this.updatePrintifyProducts([
+      { id: printifyProductId, medusa_product_id: null },
+    ] as any)
+  }
+
+  async createMedusaProductFromPrintify(printifyProduct: any): Promise<any> {
+    this.log.info("Creating Medusa product from Printify data", { printifyProductId: printifyProduct.id })
+
+    const productService = this.container.resolve(Modules.PRODUCT) as any
+
+    const images = Array.isArray(printifyProduct.images)
+      ? printifyProduct.images.map((img: any, index: number) => ({
+          url: typeof img === "string" ? img : img.src || img.url,
+          rank: index,
+        }))
+      : []
+
+    const tags = Array.isArray(printifyProduct.tags)
+      ? printifyProduct.tags.map((tag: string) => ({ value: tag }))
+      : []
+
+    const [medusaProduct] = await productService.createProducts([
+      {
+        title: printifyProduct.title,
+        description: printifyProduct.description || "",
+        status: "published",
+        images,
+        tags,
+        metadata: {
+          printify_product_id: printifyProduct.printify_product_id || printifyProduct.id,
+          printify_auto_created: true,
+        },
+      },
+    ])
+
+    return medusaProduct
+  }
+
+  async getProductWithMedusaData(printifyProductId: string): Promise<any> {
+    try {
+      const query = this.container.resolve(ContainerRegistrationKeys.QUERY) as any
+      const { data } = await query.graph({
+        entity: "printify_product",
+        fields: [
+          "id", "printify_product_id", "title", "description", "enabled",
+          "medusa_product_id", "created_at", "updated_at",
+          "product.id", "product.handle", "product.thumbnail", "product.status",
+        ],
+        filters: { id: printifyProductId },
+      })
+      return data?.[0] ?? null
+    } catch (error) {
+      this.log.warn("Failed to query product with Medusa data, falling back", {
+        printifyProductId,
+        error: (error as Error).message,
+      })
+      return this.getProductById(printifyProductId)
+    }
+  }
+
+  async getOrderWithMedusaData(printifyOrderId: string): Promise<any> {
+    try {
+      const query = this.container.resolve(ContainerRegistrationKeys.QUERY) as any
+      const { data } = await query.graph({
+        entity: "printify_order",
+        fields: [
+          "id", "medusa_order_id", "printify_order_id", "status",
+          "total_price", "created_at", "updated_at",
+          "order.id", "order.display_id", "order.status", "order.email",
+        ],
+        filters: { id: printifyOrderId },
+      })
+      return data?.[0] ?? null
+    } catch (error) {
+      this.log.warn("Failed to query order with Medusa data, falling back", {
+        printifyOrderId,
+        error: (error as Error).message,
+      })
+      return this.getOrderBridge(printifyOrderId)
+    }
   }
 
 }

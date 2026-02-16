@@ -31,6 +31,21 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
     const { reason } = bodyValidation.data
     const product = await printifyService.enableProduct(productId, userId, reason)
 
+    // Fetch linked Medusa product data if available
+    let medusaProduct: any = null
+    try {
+      const enriched = await printifyService.getProductWithMedusaData(productId)
+      if (enriched?.product) {
+        medusaProduct = {
+          id: enriched.product.id,
+          handle: enriched.product.handle,
+          status: enriched.product.status,
+        }
+      }
+    } catch {
+      // Non-fatal: linked data may not be available yet
+    }
+
     res.status(200).json({
       success: true,
       message: "Product enabled successfully",
@@ -40,6 +55,7 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
         title: product?.title,
         enabled: product?.enabled,
         updated_at: product?.updated_at,
+        medusa_product: medusaProduct,
       },
     })
   } catch (error) {
