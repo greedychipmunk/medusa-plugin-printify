@@ -69,6 +69,14 @@ export interface PrintifyShop {
   sales_channel: string;
 }
 
+export interface PrintifyWebhook {
+  id: string;
+  topic: string;
+  url: string;
+  shop_id: string;
+  secret: string;
+}
+
 export interface PrintifyApiError {
   error: string;
   message: string;
@@ -275,6 +283,33 @@ export class PrintifyApiClient {
    */
   async cancelOrder(orderId: string): Promise<void> {
     await this.client.delete(`/shops/${this.config.shopId}/orders/${orderId}.json`);
+  }
+
+  /**
+   * List all webhooks for the shop
+   */
+  async listWebhooks(): Promise<PrintifyWebhook[]> {
+    const response = await this.client.get(`/shops/${this.config.shopId}/webhooks.json`);
+    return response.data;
+  }
+
+  /**
+   * Create a new webhook for the shop
+   */
+  async createWebhook(topic: string, url: string, secret?: string): Promise<PrintifyWebhook> {
+    const payload: Record<string, string> = { topic, url };
+    if (secret) {
+      payload.secret = secret;
+    }
+    const response = await this.client.post(`/shops/${this.config.shopId}/webhooks.json`, payload);
+    return response.data;
+  }
+
+  /**
+   * Delete a webhook by ID
+   */
+  async deleteWebhook(webhookId: string): Promise<void> {
+    await this.client.delete(`/shops/${this.config.shopId}/webhooks/${webhookId}.json`);
   }
 
   /**
