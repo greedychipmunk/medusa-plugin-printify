@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react"
-import { defineWidgetConfig } from "@medusajs/admin-sdk"
+import { useState, useEffect } from "react"
+import { defineRouteConfig } from "@medusajs/admin-sdk"
 import {
   Input,
   Button,
@@ -12,8 +12,8 @@ import {
   Text,
   Heading,
 } from "@medusajs/ui"
-import { Container } from "../components/container"
-import { Header } from "../components/header"
+import { Container } from "../../../components/container"
+import { Header } from "../../../components/header"
 
 interface PrintifyConfiguration {
   id: string
@@ -21,6 +21,8 @@ interface PrintifyConfiguration {
   printify_shop_id: string
   sync_enabled: boolean
   sync_frequency: number
+  has_api_key: boolean
+  has_webhook_secret: boolean
   created_at: string
   updated_at: string
 }
@@ -28,7 +30,7 @@ interface PrintifyConfiguration {
 interface ConfigurationFormData {
   printify_api_key: string
   printify_shop_id: string
-  webhook_secret?: string
+  webhook_secret: string
   sync_enabled: boolean
   sync_frequency: number
 }
@@ -43,9 +45,8 @@ const SYNC_FREQUENCY_OPTIONS = [
   { value: "1440", label: "Daily" },
 ]
 
-const PrintifyConfigurationWidget = () => {
-  const [configuration, setConfiguration] =
-    useState<PrintifyConfiguration | null>(null)
+const PrintifySettingsPage = () => {
+  const [configuration, setConfiguration] = useState<PrintifyConfiguration | null>(null)
   const [formData, setFormData] = useState<ConfigurationFormData>({
     printify_api_key: "",
     printify_shop_id: "",
@@ -66,7 +67,7 @@ const PrintifyConfigurationWidget = () => {
   const loadConfiguration = async () => {
     try {
       setIsLoading(true)
-      const response = await fetch("/admin/printify/configuration")
+      const response = await fetch("/admin/printify/config")
 
       if (response.ok) {
         const data = await response.json()
@@ -89,27 +90,14 @@ const PrintifyConfigurationWidget = () => {
   }
 
   const testConnection = async () => {
-    if (!formData.printify_api_key || !formData.printify_shop_id) {
-      toast.error("API Key and Shop ID are required for testing")
-      return
-    }
-
     try {
       setIsTesting(true)
-
-      const response = await fetch("/admin/printify/configuration/test", {
+      const response = await fetch("/admin/printify/config/test", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          printify_api_key: formData.printify_api_key,
-          printify_shop_id: formData.printify_shop_id,
-        }),
+        headers: { "Content-Type": "application/json" },
       })
 
       const data = await response.json()
-
       if (data.success) {
         toast.success("Connection Test", {
           description: "Printify connection test successful",
@@ -133,16 +121,13 @@ const PrintifyConfigurationWidget = () => {
       setIsSaving(true)
 
       const method = configuration ? "PUT" : "POST"
-      const response = await fetch("/admin/printify/configuration", {
+      const response = await fetch("/admin/printify/config", {
         method,
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       })
 
       const data = await response.json()
-
       if (data.success) {
         setConfiguration(data.data)
         toast.success(
@@ -153,8 +138,6 @@ const PrintifyConfigurationWidget = () => {
               : "Configuration created successfully",
           }
         )
-
-        // Clear sensitive fields from form
         setFormData((prev) => ({
           ...prev,
           printify_api_key: "",
@@ -179,10 +162,7 @@ const PrintifyConfigurationWidget = () => {
     field: keyof ConfigurationFormData,
     value: string | boolean | number
   ) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
   if (isLoading) {
@@ -200,7 +180,7 @@ const PrintifyConfigurationWidget = () => {
     <>
       <Container>
         <Header
-          title="Printify Configuration"
+          title="Printify Settings"
           subtitle="Configure your Printify integration settings and API credentials"
         />
 
@@ -213,9 +193,7 @@ const PrintifyConfigurationWidget = () => {
                   Current Configuration
                 </Heading>
                 <div className="flex items-center gap-2">
-                  <StatusBadge
-                    color={configuration.sync_enabled ? "green" : "grey"}
-                  >
+                  <StatusBadge color={configuration.sync_enabled ? "green" : "grey"}>
                     {configuration.sync_enabled ? "Sync Enabled" : "Sync Disabled"}
                   </StatusBadge>
                   <Text size="small" className="text-ui-fg-subtle">
@@ -225,8 +203,7 @@ const PrintifyConfigurationWidget = () => {
               </div>
               <div className="text-right">
                 <Text size="small" className="text-ui-fg-subtle">
-                  Last Updated:{" "}
-                  {new Date(configuration.updated_at).toLocaleDateString()}
+                  Last Updated: {new Date(configuration.updated_at).toLocaleDateString()}
                 </Text>
               </div>
             </div>
@@ -235,31 +212,22 @@ const PrintifyConfigurationWidget = () => {
 
         {/* API Credentials Section */}
         <div className="px-6 py-4">
-          <Heading level="h3" className="mb-4">
-            API Credentials
-          </Heading>
-
+          <Heading level="h3" className="mb-4">API Credentials</Heading>
           <div className="space-y-4">
-            {/* API Key */}
             <div>
               <Label htmlFor="api-key" className="mb-2">
-                Printify API Key *
+                Printify API Key {configuration?.has_api_key ? "(saved)" : "*"}
               </Label>
               <div className="flex gap-2">
                 <Input
                   id="api-key"
                   type={showApiKey ? "text" : "password"}
-                  placeholder="Enter your Printify API key"
+                  placeholder={configuration?.has_api_key ? "Enter new key to update" : "Enter your Printify API key"}
                   value={formData.printify_api_key}
-                  onChange={(e) =>
-                    handleInputChange("printify_api_key", e.target.value)
-                  }
+                  onChange={(e) => handleInputChange("printify_api_key", e.target.value)}
                   className="flex-1"
                 />
-                <Button
-                  variant="secondary"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                >
+                <Button variant="secondary" onClick={() => setShowApiKey(!showApiKey)}>
                   {showApiKey ? "Hide" : "Show"}
                 </Button>
               </div>
@@ -268,76 +236,59 @@ const PrintifyConfigurationWidget = () => {
               </Text>
             </div>
 
-            {/* Shop ID */}
             <div>
-              <Label htmlFor="shop-id" className="mb-2">
-                Printify Shop ID *
-              </Label>
+              <Label htmlFor="shop-id" className="mb-2">Printify Shop ID *</Label>
               <Input
                 id="shop-id"
                 type="text"
                 placeholder="Enter your Printify shop ID"
                 value={formData.printify_shop_id}
-                onChange={(e) =>
-                  handleInputChange("printify_shop_id", e.target.value)
-                }
+                onChange={(e) => handleInputChange("printify_shop_id", e.target.value)}
               />
               <Text size="small" className="text-ui-fg-subtle mt-1">
                 Found in your Printify shop settings
               </Text>
             </div>
 
-            {/* Webhook Secret */}
             <div>
               <Label htmlFor="webhook-secret" className="mb-2">
-                Webhook Secret (Optional)
+                Webhook Secret {configuration?.has_webhook_secret ? "(saved)" : "(Optional)"}
               </Label>
               <div className="flex gap-2">
                 <Input
                   id="webhook-secret"
                   type={showWebhookSecret ? "text" : "password"}
-                  placeholder="Enter webhook secret for secure webhooks"
-                  value={formData.webhook_secret || ""}
-                  onChange={(e) =>
-                    handleInputChange("webhook_secret", e.target.value)
-                  }
+                  placeholder={configuration?.has_webhook_secret ? "Enter new secret to update" : "Enter webhook secret for secure webhooks"}
+                  value={formData.webhook_secret}
+                  onChange={(e) => handleInputChange("webhook_secret", e.target.value)}
                   className="flex-1"
                 />
-                <Button
-                  variant="secondary"
-                  onClick={() => setShowWebhookSecret(!showWebhookSecret)}
-                >
+                <Button variant="secondary" onClick={() => setShowWebhookSecret(!showWebhookSecret)}>
                   {showWebhookSecret ? "Hide" : "Show"}
                 </Button>
               </div>
             </div>
 
             {/* Test Connection */}
-            <div>
-              <Button
-                variant="secondary"
-                onClick={testConnection}
-                isLoading={isTesting}
-                disabled={
-                  isTesting ||
-                  !formData.printify_api_key ||
-                  !formData.printify_shop_id
-                }
-              >
-                {isTesting ? "Testing..." : "Test Connection"}
-              </Button>
-            </div>
+            {configuration && (
+              <div>
+                <Button
+                  variant="secondary"
+                  onClick={testConnection}
+                  isLoading={isTesting}
+                  disabled={isTesting}
+                >
+                  {isTesting ? "Testing..." : "Test Connection"}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Sync Settings Section */}
         <div className="px-6 py-4">
-          <Heading level="h3" className="mb-4">
-            Sync Settings
-          </Heading>
-
+          <Heading level="h3" className="mb-4">Sync Settings</Heading>
           <div className="space-y-4">
-            {/* Enable Sync Toggle */}
             <div className="flex items-center justify-between">
               <div>
                 <Label htmlFor="sync-enabled">Enable Automatic Sync</Label>
@@ -348,22 +299,15 @@ const PrintifyConfigurationWidget = () => {
               <Switch
                 id="sync-enabled"
                 checked={formData.sync_enabled}
-                onCheckedChange={(checked) =>
-                  handleInputChange("sync_enabled", checked)
-                }
+                onCheckedChange={(checked) => handleInputChange("sync_enabled", checked)}
               />
             </div>
 
-            {/* Sync Frequency */}
             <div>
-              <Label htmlFor="sync-frequency" className="mb-2">
-                Sync Frequency
-              </Label>
+              <Label htmlFor="sync-frequency" className="mb-2">Sync Frequency</Label>
               <Select
                 value={formData.sync_frequency.toString()}
-                onValueChange={(value) =>
-                  handleInputChange("sync_frequency", parseInt(value))
-                }
+                onValueChange={(value) => handleInputChange("sync_frequency", parseInt(value))}
                 disabled={!formData.sync_enabled}
               >
                 <Select.Trigger id="sync-frequency">
@@ -391,7 +335,7 @@ const PrintifyConfigurationWidget = () => {
             isLoading={isSaving}
             disabled={
               isSaving ||
-              !formData.printify_api_key ||
+              (!configuration && !formData.printify_api_key) ||
               !formData.printify_shop_id
             }
           >
@@ -408,8 +352,8 @@ const PrintifyConfigurationWidget = () => {
   )
 }
 
-export const config = defineWidgetConfig({
-  zone: "order.details.before",
+export const config = defineRouteConfig({
+  label: "Settings",
 })
 
-export default PrintifyConfigurationWidget
+export default PrintifySettingsPage

@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useMemo } from "react"
-import { defineWidgetConfig } from "@medusajs/admin-sdk"
+import { useState, useEffect, useMemo } from "react"
+import { defineRouteConfig } from "@medusajs/admin-sdk"
 import {
   Badge,
   Button,
-  Input,
-  Select,
   StatusBadge,
   toast,
   Toaster,
@@ -18,8 +16,8 @@ import {
   CommandBar,
   Text,
 } from "@medusajs/ui"
-import { Container } from "../components/container"
-import { Header } from "../components/header"
+import { Container } from "../../../components/container"
+import { Header } from "../../../components/header"
 
 interface PrintifyProduct {
   id: string
@@ -47,7 +45,6 @@ interface ProductStats {
   available_products: number
 }
 
-// Create column helper for type-safe columns
 const columnHelper = createDataTableColumnHelper<PrintifyProduct>()
 
 const columns = [
@@ -123,7 +120,6 @@ const columns = [
   }),
 ]
 
-// Create filter helper
 const filterHelper = createDataTableFilterHelper<PrintifyProduct>()
 
 const filters = [
@@ -131,26 +127,18 @@ const filters = [
     type: "select",
     label: "Status",
     options: [
-      {
-        label: "Enabled",
-        value: "true",
-      },
-      {
-        label: "Disabled",
-        value: "false",
-      },
+      { label: "Enabled", value: "true" },
+      { label: "Disabled", value: "false" },
     ],
   }),
 ]
 
-const PrintifyProductManagementWidget = () => {
+const PrintifyProductsPage = () => {
   const [products, setProducts] = useState<PrintifyProduct[]>([])
   const [stats, setStats] = useState<ProductStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
-  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(
-    new Set()
-  )
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set())
   const [searchTerm, setSearchTerm] = useState("")
   const [pagination, setPagination] = useState<DataTablePaginationState>({
     pageSize: 20,
@@ -159,10 +147,6 @@ const PrintifyProductManagementWidget = () => {
   const [filtering, setFiltering] = useState<DataTableFilteringState>({})
   const [sorting, setSorting] = useState<DataTableSortingState | null>(null)
   const [rowCount, setRowCount] = useState(0)
-
-  const offset = useMemo(() => {
-    return pagination.pageIndex * pagination.pageSize
-  }, [pagination])
 
   const enabledFilter = useMemo(() => {
     const filterValue = filtering.enabled as string[] | undefined
@@ -206,7 +190,6 @@ const PrintifyProductManagementWidget = () => {
     try {
       const response = await fetch("/admin/printify/products/stats")
       const data = await response.json()
-
       if (data.success) {
         setStats(data.data)
       }
@@ -218,9 +201,7 @@ const PrintifyProductManagementWidget = () => {
   const syncProducts = async () => {
     try {
       setIsSyncing(true)
-      const response = await fetch("/admin/printify/products/sync", {
-        method: "POST",
-      })
+      const response = await fetch("/admin/printify/products/sync", { method: "POST" })
       const data = await response.json()
 
       if (data.success) {
@@ -249,27 +230,19 @@ const PrintifyProductManagementWidget = () => {
   const toggleProductEnabled = async (productId: string, enabled: boolean) => {
     try {
       const endpoint = enabled ? "enable" : "disable"
-      const response = await fetch(
-        `/admin/printify/products/${productId}/${endpoint}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            reason: `Manual ${enabled ? "enable" : "disable"} from admin panel`,
-          }),
-        }
-      )
+      const response = await fetch(`/admin/printify/products/${productId}/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason: `Manual ${enabled ? "enable" : "disable"} from admin panel`,
+        }),
+      })
 
       const data = await response.json()
       if (data.success) {
-        toast.success(
-          enabled ? "Product Enabled" : "Product Disabled",
-          {
-            description: `Product ${enabled ? "enabled" : "disabled"} successfully`,
-          }
-        )
+        toast.success(enabled ? "Product Enabled" : "Product Disabled", {
+          description: `Product ${enabled ? "enabled" : "disabled"} successfully`,
+        })
         loadProducts()
         loadStats()
       } else {
@@ -278,7 +251,7 @@ const PrintifyProductManagementWidget = () => {
         })
       }
     } catch (error) {
-      console.error(`Failed to toggle product:`, error)
+      console.error("Failed to toggle product:", error)
       toast.error("Operation Failed", {
         description: `Failed to ${enabled ? "enable" : "disable"} product`,
       })
@@ -287,9 +260,7 @@ const PrintifyProductManagementWidget = () => {
 
   const bulkToggleProducts = async (enabled: boolean) => {
     if (selectedProducts.size === 0) {
-      toast.error("No Selection", {
-        description: "Please select products first",
-      })
+      toast.error("No Selection", { description: "Please select products first" })
       return
     }
 
@@ -297,9 +268,7 @@ const PrintifyProductManagementWidget = () => {
       const endpoint = enabled ? "bulk-enable" : "bulk-disable"
       const response = await fetch(`/admin/printify/products/${endpoint}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           product_ids: Array.from(selectedProducts),
           reason: `Bulk ${enabled ? "enable" : "disable"} from admin panel`,
@@ -320,7 +289,7 @@ const PrintifyProductManagementWidget = () => {
         })
       }
     } catch (error) {
-      console.error(`Failed to bulk toggle products:`, error)
+      console.error("Failed to bulk toggle products:", error)
       toast.error("Bulk Operation Failed", {
         description: `Failed to ${enabled ? "enable" : "disable"} products`,
       })
@@ -331,7 +300,7 @@ const PrintifyProductManagementWidget = () => {
     columns,
     data: products,
     getRowId: (row) => row.id,
-    rowCount: rowCount,
+    rowCount,
     isLoading,
     pagination: {
       state: pagination,
@@ -375,7 +344,7 @@ const PrintifyProductManagementWidget = () => {
     <>
       <Container>
         <Header
-          title="Printify Product Management"
+          title="Printify Products"
           subtitle="Manage your Printify products, sync with the catalog, and control storefront visibility"
           actions={[
             {
@@ -396,47 +365,27 @@ const PrintifyProductManagementWidget = () => {
           <div className="grid grid-cols-2 gap-4 px-6 py-4 md:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-lg border border-ui-border-base p-4">
               <Text className="text-2xl font-bold">{stats.total_products}</Text>
-              <Text size="small" className="text-ui-fg-subtle">
-                Total Products
-              </Text>
+              <Text size="small" className="text-ui-fg-subtle">Total Products</Text>
             </div>
             <div className="rounded-lg border border-ui-border-base p-4">
-              <Text className="text-2xl font-bold text-ui-fg-interactive">
-                {stats.enabled_products}
-              </Text>
-              <Text size="small" className="text-ui-fg-subtle">
-                Enabled
-              </Text>
+              <Text className="text-2xl font-bold text-ui-fg-interactive">{stats.enabled_products}</Text>
+              <Text size="small" className="text-ui-fg-subtle">Enabled</Text>
             </div>
             <div className="rounded-lg border border-ui-border-base p-4">
               <Text className="text-2xl font-bold">{stats.disabled_products}</Text>
-              <Text size="small" className="text-ui-fg-subtle">
-                Disabled
-              </Text>
+              <Text size="small" className="text-ui-fg-subtle">Disabled</Text>
             </div>
             <div className="rounded-lg border border-ui-border-base p-4">
-              <Text className="text-2xl font-bold text-ui-tag-orange-text">
-                {stats.needs_sync}
-              </Text>
-              <Text size="small" className="text-ui-fg-subtle">
-                Needs Sync
-              </Text>
+              <Text className="text-2xl font-bold text-ui-tag-orange-text">{stats.needs_sync}</Text>
+              <Text size="small" className="text-ui-fg-subtle">Needs Sync</Text>
             </div>
             <div className="rounded-lg border border-ui-border-base p-4">
-              <Text className="text-2xl font-bold text-ui-fg-interactive">
-                {stats.linked_to_medusa}
-              </Text>
-              <Text size="small" className="text-ui-fg-subtle">
-                Linked to Medusa
-              </Text>
+              <Text className="text-2xl font-bold text-ui-fg-interactive">{stats.linked_to_medusa}</Text>
+              <Text size="small" className="text-ui-fg-subtle">Linked to Medusa</Text>
             </div>
             <div className="rounded-lg border border-ui-border-base p-4">
-              <Text className="text-2xl font-bold text-ui-tag-purple-text">
-                {stats.available_products}
-              </Text>
-              <Text size="small" className="text-ui-fg-subtle">
-                Available
-              </Text>
+              <Text className="text-2xl font-bold text-ui-tag-purple-text">{stats.available_products}</Text>
+              <Text size="small" className="text-ui-fg-subtle">Available</Text>
             </div>
           </div>
         )}
@@ -454,7 +403,7 @@ const PrintifyProductManagementWidget = () => {
             <DataTable.Pagination />
           </DataTable>
 
-          {/* Product Actions - shown below table */}
+          {/* Product Actions */}
           {products.length > 0 && (
             <div className="mt-4 space-y-2">
               {products.map((product) => (
@@ -475,9 +424,7 @@ const PrintifyProductManagementWidget = () => {
                   <Button
                     variant={product.enabled ? "secondary" : "primary"}
                     size="small"
-                    onClick={() =>
-                      toggleProductEnabled(product.id, !product.enabled)
-                    }
+                    onClick={() => toggleProductEnabled(product.id, !product.enabled)}
                   >
                     {product.enabled ? "Disable" : "Enable"}
                   </Button>
@@ -491,9 +438,7 @@ const PrintifyProductManagementWidget = () => {
       {/* Command Bar for Bulk Actions */}
       <CommandBar open={selectedProducts.size > 0}>
         <CommandBar.Bar>
-          <CommandBar.Value>
-            {selectedProducts.size} selected
-          </CommandBar.Value>
+          <CommandBar.Value>{selectedProducts.size} selected</CommandBar.Value>
           <CommandBar.Seperator />
           <CommandBar.Command
             action={() => bulkToggleProducts(true)}
@@ -520,8 +465,8 @@ const PrintifyProductManagementWidget = () => {
   )
 }
 
-export const config = defineWidgetConfig({
-  zone: "product.list.before",
+export const config = defineRouteConfig({
+  label: "Products",
 })
 
-export default PrintifyProductManagementWidget
+export default PrintifyProductsPage
