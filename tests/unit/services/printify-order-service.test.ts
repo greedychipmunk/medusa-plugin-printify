@@ -8,6 +8,13 @@ import type { CreateOrderRequest } from '../../../src/modules/printify/service';
 jest.mock('@medusajs/framework/utils', () => {
   return {
     MedusaService: () => class MockBase {},
+    Modules: {
+      PRODUCT: 'productService',
+      ORDER: 'orderService',
+    },
+    ContainerRegistrationKeys: {
+      QUERY: 'query',
+    },
     model: {
       define: jest.fn().mockReturnValue({}),
       id: jest.fn().mockReturnValue({ primaryKey: jest.fn() }),
@@ -407,6 +414,62 @@ describe('PrintifyOrderService (via PrintifyModuleService)', () => {
     it('should throw error for non-existent order', async () => {
       await expect(service.getOrderBridge('non-existent'))
         .rejects.toThrow(PrintifyPluginError);
+    });
+  });
+
+  describe('getOrderWithMedusaData', () => {
+    let mockQuery: any;
+
+    beforeEach(() => {
+      mockQuery = {
+        graph: jest.fn(),
+      };
+      (service as any).__container__ = {
+        resolve: (key: string) => {
+          if (key === 'query') return mockQuery;
+          if (key === 'link') return { create: jest.fn(), dismiss: jest.fn() };
+          return undefined;
+        },
+      };
+    });
+
+    it('should return enriched data via query.graph', async () => {
+      mockQuery.graph.mockResolvedValue({
+        data: [{
+          id: 'order_1',
+          medusa_order_id: 'medusa-order-1',
+          status: 'pending',
+          order: { id: 'medusa-o-1', display_id: '1001', status: 'pending', email: 'test@example.com' },
+        }],
+      });
+
+      const result = await service.getOrderWithMedusaData('order_1');
+
+      expect(mockQuery.graph).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entity: 'printify_order',
+          filters: { id: 'order_1' },
+        })
+      );
+      expect(result.order.display_id).toBe('1001');
+    });
+
+    it('should fall back to getOrderBridge on query.graph failure', async () => {
+      mockQuery.graph.mockRejectedValue(new Error('Query error'));
+
+      // Create an order first so getOrderBridge can find it
+      const cartItems = [createMockCartItem()];
+      const order = await service.createOrderFromCart({
+        medusaOrderId: 'medusa-order-fallback',
+        customerEmail: 'fallback@example.com',
+        cartItems,
+        shippingAddress: mockShippingAddress,
+      });
+
+      const result = await service.getOrderWithMedusaData(order.id);
+
+      expect(result).toBeDefined();
+      expect(result.id).toBe(order.id);
     });
   });
 

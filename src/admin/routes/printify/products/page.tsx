@@ -118,6 +118,17 @@ const columns = [
       )
     },
   }),
+  columnHelper.accessor("medusa_product_id", {
+    header: "Medusa Link",
+    cell: ({ row }) => {
+      const product = row.original
+      return product.medusa_product_id ? (
+        <StatusBadge color="green">Linked</StatusBadge>
+      ) : (
+        <StatusBadge color="grey">Not Linked</StatusBadge>
+      )
+    },
+  }),
 ]
 
 const filterHelper = createDataTableFilterHelper<PrintifyProduct>()

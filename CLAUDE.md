@@ -15,7 +15,7 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Order Processing**: Automatic order submission to Printify, real-time status sync, tracking management
 - **Shopping Cart Integration**: Add Printify products to cart, validation, custom options
 - **Admin Dashboard**: Configuration management, order interface, analytics
-- **Modern Architecture**: DML entities, TypeScript, comprehensive test coverage (82 tests)
+- **Modern Architecture**: DML entities, TypeScript, comprehensive test coverage (137 tests)
 
 ## Architecture & Modernization Status
 
@@ -23,13 +23,20 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Modern Data Models**: All models converted to MedusaJS v2 DML patterns with full type safety
 - **Service Layer**: Updated services using DML entities while maintaining legacy API compatibility
 - **Bridge Pattern**: Seamless backward compatibility ensuring zero breaking changes
-- **Test Coverage**: 82/82 tests passing across 5 test suites
+- **Test Coverage**: 137/137 tests passing across 10 test suites
 
-### ✅ **Phase 5 Complete**: API Routes Modernization  
+### ✅ **Phase 5 Complete**: API Routes Modernization
 - **Modern Import Patterns**: All routes using `@medusajs/framework/http` imports
 - **Request/Response Types**: `AuthenticatedMedusaRequest` and `MedusaResponse` throughout
 - **Build Validation**: Clean TypeScript compilation with modern patterns
 - **Functionality Preservation**: All existing behavior maintained
+
+### ✅ **Phase 5b Complete**: Admin UI + Workflow Links + Test Coverage
+- **Product Stats Endpoint**: `GET /admin/printify/products/stats` returns aggregated product statistics
+- **Products Page**: Added "Medusa Link" column showing linked/unlinked status per product
+- **Order Detail Page**: Shows linked Medusa order badge with display ID
+- **Submit Workflow**: `updateOrderRecordStep` creates module link to Medusa order
+- **Test Coverage**: 137/137 tests across 10 suites — link service, cart validation, order enrichment
 
 ## Key Components
 
@@ -126,7 +133,7 @@ export class PrintifyOrderService {
 ## Testing Requirements
 
 ### Test Coverage
-- **82 tests total** across 5 test suites
+- **137 tests total** across 5 test suites
 - **100% success rate** required for any changes
 - **Critical path coverage** for all user-facing functionality
 - **DML model validation** with both entity and bridge patterns
@@ -135,11 +142,19 @@ export class PrintifyOrderService {
 ```
 tests/
 ├── unit/
-│   ├── api/admin-endpoints.test.ts         # 28 API tests
-│   ├── models/printify-configuration-dml.test.ts # 13 model tests
-│   ├── models/printify-product-dml.test.ts       # 14 model tests
-│   ├── services/printify-cart-service.test.ts    # 6 service tests
-│   └── services/printify-order-service.test.ts   # 17 service tests
+│   ├── api/
+│   │   ├── admin-endpoints.test.ts              # 28 API tests
+│   │   ├── cart-validation.test.ts              # 6 cart validation tests
+│   │   ├── storefront-endpoints.test.ts         # 14 storefront tests
+│   │   └── webhook-endpoints.test.ts            # 10 webhook tests
+│   ├── models/
+│   │   ├── printify-configuration-dml.test.ts   # 13 model tests
+│   │   └── printify-product-dml.test.ts         # 14 model tests
+│   ├── services/
+│   │   ├── printify-cart-service.test.ts        # 6 service tests
+│   │   ├── printify-link-service.test.ts        # 14 link/module tests
+│   │   └── printify-order-service.test.ts       # 19 service tests
+│   └── ...
 └── setup.ts
 ```
 
@@ -290,7 +305,7 @@ logger.error("Failed to sync product", {
 # Development
 npm run build            # Compile TypeScript
 npm run watch           # Development with watch mode
-npm test               # Run test suite (82 tests)
+npm test               # Run test suite (137 tests)
 npm run lint           # ESLint validation
 npm run lint:fix       # Auto-fix linting issues
 
@@ -307,7 +322,7 @@ npm start
 
 ### Common Issues
 1. **TypeScript Compilation Errors**: Ensure using `@medusajs/framework` imports
-2. **Test Failures**: Run `npm test` - all 82 tests must pass
+2. **Test Failures**: Run `npm test` - all 137 tests must pass
 3. **DML Entity Issues**: Check bridge pattern implementation
 4. **API Connection**: Verify Printify API key and shop ID
 5. **Database**: Ensure migrations are run for DML tables
@@ -329,7 +344,7 @@ PRINTIFY_LOG_LEVEL=debug npm run dev
 When working with this plugin:
 
 1. **Always maintain modern import patterns** - use `@medusajs/framework` imports
-2. **Preserve test coverage** - all 82 tests must continue passing
+2. **Preserve test coverage** - all 137 tests must continue passing
 3. **Use DML entities** with bridge compatibility for any model changes
 4. **Follow TypeScript strict typing** - no `any` types in production code
 5. **Implement proper error handling** with retry logic for external APIs
