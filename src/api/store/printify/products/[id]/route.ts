@@ -35,12 +35,28 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
       return
     }
 
+    // Fetch linked Medusa product data if available
+    let medusaProductHandle: string | null = null
+    let medusaProductThumbnail: string | null = null
+    try {
+      const enriched = await printifyService.getProductWithMedusaData(id)
+      if (enriched?.product) {
+        medusaProductHandle = enriched.product.handle || null
+        medusaProductThumbnail = enriched.product.thumbnail || null
+      }
+    } catch {
+      // Non-fatal: linked data may not be available
+    }
+
     res.json({
       data: {
         id: product.id,
         title: product.title,
         description: product.description,
         enabled: product.enabled,
+        medusa_product_id: (product as any).medusa_product_id || null,
+        medusa_handle: medusaProductHandle,
+        medusa_thumbnail: medusaProductThumbnail,
         created_at: product.created_at,
         updated_at: product.updated_at,
         breadcrumbs: [
