@@ -2,7 +2,6 @@ import crypto from "crypto"
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import type PrintifyModuleService from "../../../modules/printify/service"
 import { PRINTIFY_MODULE } from "../../../modules/printify"
-import { PrintifyApiClient } from "../../../modules/printify/services/printify-api-client"
 import { PrintifyOrderStatus } from "../../../modules/printify/models/printify-order"
 import { logger } from "../../../modules/printify/utils/logger"
 import type { PrintifyWebhookEvent } from "./types"
@@ -171,13 +170,9 @@ async function handleProductUpdated(
   }
 
   // Attempt immediate sync if config is available
-  if (config?.printify_api_key && config?.printify_shop_id) {
+  if (config?.id) {
     try {
-      const apiClient = new PrintifyApiClient({
-        apiKey: config.printify_api_key,
-        shopId: config.printify_shop_id,
-      })
-
+      const apiClient = await service.getApiClientForConfig(config.id)
       const freshData = await apiClient.getProduct(printifyProductId)
 
       await service.updatePrintifyProducts([

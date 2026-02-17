@@ -7,15 +7,7 @@
 
 import crypto from "crypto"
 
-// Mock PrintifyApiClient before any imports that reference it
-jest.mock("../../../src/modules/printify/services/printify-api-client", () => ({
-  PrintifyApiClient: jest.fn().mockImplementation(() => ({
-    getProduct: jest.fn(),
-  })),
-}))
-
 import { POST } from "../../../src/api/webhooks/printify/route"
-import { PrintifyApiClient } from "../../../src/modules/printify/services/printify-api-client"
 
 const WEBHOOK_SECRET = "test-webhook-secret"
 
@@ -250,12 +242,10 @@ describe("Webhook Endpoints", () => {
         tags: ["tag1"],
         images: [{ src: "img.png", variant_ids: [], position: "front", is_default: true }],
       })
-      ;(PrintifyApiClient as jest.Mock).mockImplementation(() => ({
-        getProduct: mockGetProduct,
-      }))
 
       const service = buildMockService({
         listPrintifyProducts: jest.fn().mockResolvedValue([{ id: "local-1", printify_product_id: "printify-prod-1" }]),
+        getApiClientForConfig: jest.fn().mockResolvedValue({ getProduct: mockGetProduct }),
       })
 
       const body = {
