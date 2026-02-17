@@ -34,7 +34,7 @@ export class PrintifyOrderBridge {
   // Additional compatibility properties
   get customerId() { return this.entity.customerId; }
   get customerEmail() { return this.entity.customerEmail; }
-  get retryCount() { return this.entity.retryCount || 0; }
+  get retryCount() { return this.entity.retry_count ?? this.entity.retryCount ?? 0; }
   get maxRetries() { return this.entity.maxRetries || 3; }
   get lastError() { return this.entity.error_details; }
   get tracking() { return this.entity.tracking; }

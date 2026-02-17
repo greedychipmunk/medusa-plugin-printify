@@ -31,6 +31,8 @@ const PrintifyOrder = model.define("PrintifyOrder", {
   printify_data: model.json().nullable(),
   submitted_at: model.dateTime().nullable(),
   error_details: model.text().nullable(),
+  retry_count: model.number().default(0),
+  last_error_at: model.dateTime().nullable(),
 });
 
 export default PrintifyOrder;
