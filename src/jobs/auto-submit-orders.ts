@@ -5,6 +5,8 @@ import { PrintifyOrderStatus } from "../modules/printify/models/printify-order"
 import { automationActivityStore } from "../modules/printify/utils/automation-activity"
 import { submitPrintifyOrderWorkflow } from "../workflows/submit-printify-order"
 
+const MAX_RETRIES = 3
+
 export default async function autoSubmitOrdersJob(container: MedusaContainer) {
   const logger = container.resolve("logger") as any
   const printifyService: PrintifyModuleService = container.resolve(PRINTIFY_MODULE)
@@ -48,6 +50,7 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
 
         let submitted = 0
         let failed = 0
+        let deadLettered = 0
 
         for (const order of pendingOrders) {
           try {
@@ -58,12 +61,52 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
               },
             })
             submitted++
+
+            // Reset retry_count on success if it was previously incremented
+            const currentRetryCount = (order as any).entity?.retry_count ?? (order as any).retry_count ?? 0
+            if (currentRetryCount > 0) {
+              await printifyService.updatePrintifyOrders([{
+                id: order.id,
+                retry_count: 0,
+                error_details: null,
+                last_error_at: null,
+              }])
+            }
           } catch (error) {
             failed++
-            logger.warn("Failed to auto-submit order", {
-              orderId: order.id,
-              error: (error as Error).message,
-            })
+            const errorMessage = (error as Error).message
+            const currentRetryCount = ((order as any).entity?.retry_count ?? (order as any).retry_count ?? 0) + 1
+
+            if (currentRetryCount >= MAX_RETRIES) {
+              // Dead-letter: move to FAILED status
+              await printifyService.updatePrintifyOrders([{
+                id: order.id,
+                status: PrintifyOrderStatus.FAILED,
+                retry_count: currentRetryCount,
+                error_details: errorMessage,
+                last_error_at: new Date(),
+              }])
+              deadLettered++
+              logger.warn("Order dead-lettered after max retries", {
+                orderId: order.id,
+                retryCount: currentRetryCount,
+                error: errorMessage,
+              })
+            } else {
+              // Increment retry count and record error
+              await printifyService.updatePrintifyOrders([{
+                id: order.id,
+                retry_count: currentRetryCount,
+                error_details: errorMessage,
+                last_error_at: new Date(),
+              }])
+              logger.warn("Failed to auto-submit order, will retry", {
+                orderId: order.id,
+                retryCount: currentRetryCount,
+                maxRetries: MAX_RETRIES,
+                error: errorMessage,
+              })
+            }
           }
         }
 
@@ -72,6 +115,7 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
           last_run_status: "success",
           orders_submitted: submitted,
           orders_failed: failed,
+          orders_dead_lettered: deadLettered,
           error_message: undefined,
         })
 
@@ -79,6 +123,7 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
           configId: config.id,
           submitted,
           failed,
+          deadLettered,
         })
       } catch (error) {
         automationActivityStore.updateOrderAutoSubmit(config.id, {

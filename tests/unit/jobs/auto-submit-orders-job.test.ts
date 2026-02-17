@@ -18,6 +18,7 @@ function buildContainer(configs: any[] = [], orders: any[] = []) {
   const mockService = {
     listAndCountPrintifyConfigurations: jest.fn().mockResolvedValue([configs, configs.length]),
     listOrdersFiltered: jest.fn().mockResolvedValue({ orders, total: orders.length, hasMore: false }),
+    updatePrintifyOrders: jest.fn().mockResolvedValue([{}]),
   }
   return {
     resolve: jest.fn((key: string) => {

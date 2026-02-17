@@ -14,6 +14,7 @@ export interface OrderAutoSubmitActivity {
   last_run_status: ActivityStatus
   orders_submitted: number
   orders_failed: number
+  orders_dead_lettered: number
   error_message?: string
 }
 
@@ -37,6 +38,7 @@ function defaultOrderAutoSubmit(): OrderAutoSubmitActivity {
     last_run_status: "idle",
     orders_submitted: 0,
     orders_failed: 0,
+    orders_dead_lettered: 0,
   }
 }
 
