@@ -91,6 +91,7 @@ export interface CreateOrderRequest {
   shippingCost?: number
   taxAmount?: number
   discountAmount?: number
+  shippingMethod?: number
 }
 
 export interface OrderListOptions {
@@ -602,6 +603,7 @@ class PrintifyModuleService extends MedusaService({
       printifyOrderId: undefined,
       customerId: request.customerId,
       customerEmail: request.customerEmail,
+      shippingMethod: request.shippingMethod,
       pricing: {
         total: totalPrice,
         subtotal,
@@ -971,7 +973,7 @@ class PrintifyModuleService extends MedusaService({
             ]
           : undefined,
       })),
-      shipping_method: 1,
+      shipping_method: order.shippingMethod || 1,
       send_shipping_notification: true,
       address_to: {
         first_name: order.shippingAddress.firstName || order.shippingAddress.first_name,

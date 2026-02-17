@@ -38,6 +38,7 @@ export class PrintifyOrderBridge {
   get maxRetries() { return this.entity.maxRetries || 3; }
   get lastError() { return this.entity.error_details; }
   get tracking() { return this.entity.tracking; }
+  get shippingMethod(): number | undefined { return this.entity.shippingMethod; }
   
   // Direct access aliases for API routes
   get line_items() { return this.entity.line_items || this.entity.items; }

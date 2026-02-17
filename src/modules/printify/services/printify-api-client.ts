@@ -77,6 +77,29 @@ export interface PrintifyWebhook {
   secret: string;
 }
 
+export interface PrintifyShippingRequest {
+  line_items: Array<{ product_id: string; variant_id: number; quantity: number }>;
+  address_to: {
+    first_name: string;
+    last_name: string;
+    address1: string;
+    address2?: string;
+    city: string;
+    state_code?: string;
+    zip: string;
+    country_code: string;
+  };
+}
+
+export interface PrintifyShippingOption {
+  id: number;
+  name: string;
+  cost: number;
+  currency: string;
+  estimated_delivery_min?: number;
+  estimated_delivery_max?: number;
+}
+
 export interface PrintifyApiError {
   error: string;
   message: string;
@@ -283,6 +306,25 @@ export class PrintifyApiClient {
    */
   async cancelOrder(orderId: string): Promise<void> {
     await this.client.delete(`/shops/${this.config.shopId}/orders/${orderId}.json`);
+  }
+
+  /**
+   * Calculate shipping rates for a set of line items and address
+   */
+  async calculateShipping(request: PrintifyShippingRequest): Promise<PrintifyShippingOption[]> {
+    const response = await this.client.post(
+      `/shops/${this.config.shopId}/orders/shipping.json`,
+      request,
+    );
+    const data = response.data;
+    // Handle both { shipping: [...] } and direct array response formats
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (data && Array.isArray(data.shipping)) {
+      return data.shipping;
+    }
+    throw new Error('Invalid shipping response format from Printify API');
   }
 
   /**

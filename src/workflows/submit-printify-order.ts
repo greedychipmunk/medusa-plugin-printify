@@ -13,6 +13,7 @@ import { PrintifyOrderStatus } from "../modules/printify/models/printify-order"
 type SubmitInput = {
   order_id: string
   store_id: string
+  shipping_method?: number
 }
 
 // ── Steps ──────────────────────────────────────────────────────────
@@ -32,6 +33,7 @@ const validateOrderStep = createStep(
     return new StepResponse({
       order_id: input.order_id,
       store_id: input.store_id,
+      shipping_method: (input as any).shipping_method,
     })
   },
 )
@@ -39,7 +41,7 @@ const validateOrderStep = createStep(
 const submitToPrintifyStep = createStep(
   "submit-to-printify-api",
   async (
-    input: { order_id: string; store_id: string },
+    input: { order_id: string; store_id: string; shipping_method?: number },
     { container },
   ) => {
     const printifyService: PrintifyModuleService = container.resolve(PRINTIFY_MODULE)
@@ -63,7 +65,7 @@ const submitToPrintifyStep = createStep(
             ]
           : undefined,
       })),
-      shipping_method: 1,
+      shipping_method: input.shipping_method || 1,
       send_shipping_notification: true,
       address_to: {
         first_name: order.shippingAddress.firstName || order.shippingAddress.first_name,
@@ -157,6 +159,7 @@ export const submitPrintifyOrderWorkflow = createWorkflow(
     const submitted = submitToPrintifyStep({
       order_id: validated.order_id,
       store_id: validated.store_id,
+      shipping_method: validated.shipping_method,
     })
 
     const result = updateOrderRecordStep({

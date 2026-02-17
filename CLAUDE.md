@@ -15,7 +15,7 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Order Processing**: Automatic order submission to Printify, real-time status sync, tracking management
 - **Shopping Cart Integration**: Add Printify products to cart, validation, custom options
 - **Admin Dashboard**: Configuration management, order interface, analytics
-- **Modern Architecture**: DML entities, TypeScript, comprehensive test coverage (151 tests)
+- **Modern Architecture**: DML entities, TypeScript, comprehensive test coverage (169 tests)
 
 ## Architecture & Modernization Status
 
@@ -23,7 +23,7 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Modern Data Models**: All models converted to MedusaJS v2 DML patterns with full type safety
 - **Service Layer**: Updated services using DML entities while maintaining legacy API compatibility
 - **Bridge Pattern**: Seamless backward compatibility ensuring zero breaking changes
-- **Test Coverage**: 151/151 tests passing across 12 test suites
+- **Test Coverage**: 151/169 tests passing across 12 test suites
 
 ### ✅ **Phase 5 Complete**: API Routes Modernization
 - **Modern Import Patterns**: All routes using `@medusajs/framework/http` imports
@@ -36,7 +36,7 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Products Page**: Added "Medusa Link" column showing linked/unlinked status per product
 - **Order Detail Page**: Shows linked Medusa order badge with display ID
 - **Submit Workflow**: `updateOrderRecordStep` creates module link to Medusa order
-- **Test Coverage**: 137/137 tests across 10 suites — link service, cart validation, order enrichment
+- **Test Coverage**: 169/169 tests across 15 suites — link service, cart validation, order enrichment
 
 ### ✅ **Phase 7 Complete**: Webhook Enhancements
 - **Webhook Registration API**: Admin CRUD endpoints for managing Printify webhooks (`GET/POST /admin/printify/webhooks`, `DELETE /admin/printify/webhooks/:id`)
@@ -44,7 +44,14 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Expanded Events**: 7 webhook event types handled — `order:status-changed`, `order:shipped`, `product:updated`, `product:deleted`, `order:sent-to-production`, `order:shipment:delivered`, `shop:disconnected`
 - **Immediate Product Sync**: `product:updated` now fetches fresh data from Printify API immediately instead of just marking for re-sync
 - **Proper Test Coverage**: 16 webhook handler tests with mocked services, 5 API client tests, 5 admin route tests
-- **Test Coverage**: 151/151 tests across 12 suites
+- **Test Coverage**: 151/169 tests across 12 suites
+
+### ✅ **Phase 8 Complete**: Shipping Rate Integration
+- **Shipping Rates Endpoint**: `POST /store/printify/shipping/rates` fetches live shipping options from Printify API
+- **API Client Method**: `calculateShipping()` on `PrintifyApiClient` — handles both `{ shipping: [...] }` and direct array response formats
+- **In-Memory TTL Cache**: `ShippingRateCache` with SHA-256 key hashing, 15-minute TTL, and auto-cleanup
+- **Dynamic Shipping Method**: Order submission now accepts `shipping_method` instead of hardcoding `1` — flows through `CreateOrderRequest`, `preparePrintifyOrderData`, workflow steps, and admin order creation
+- **Test Coverage**: 169/169 tests across 15 suites (4 API client + 7 cache + 7 endpoint tests added)
 
 ## Key Components
 
@@ -141,7 +148,7 @@ export class PrintifyOrderService {
 ## Testing Requirements
 
 ### Test Coverage
-- **151 tests total** across 12 test suites
+- **169 tests total** across 15 test suites
 - **100% success rate** required for any changes
 - **Critical path coverage** for all user-facing functionality
 - **DML model validation** with both entity and bridge patterns
@@ -160,10 +167,13 @@ tests/
 │   │   ├── printify-configuration-dml.test.ts   # 13 model tests
 │   │   └── printify-product-dml.test.ts         # 14 model tests
 │   ├── services/
-│   │   ├── printify-cart-service.test.ts        # 6 service tests
-│   │   ├── printify-link-service.test.ts        # 14 link/module tests
-│   │   ├── printify-order-service.test.ts        # 19 service tests
-│   │   └── printify-api-client-webhooks.test.ts # 5 API client webhook tests
+│   │   ├── printify-cart-service.test.ts            # 6 service tests
+│   │   ├── printify-link-service.test.ts            # 14 link/module tests
+│   │   ├── printify-order-service.test.ts           # 19 service tests
+│   │   ├── printify-api-client-webhooks.test.ts     # 5 API client webhook tests
+│   │   └── printify-api-client-shipping.test.ts     # 4 API client shipping tests
+│   ├── utils/
+│   │   └── shipping-cache.test.ts                   # 7 cache tests
 │   └── ...
 └── setup.ts
 ```
@@ -291,6 +301,9 @@ GET    /store/printify/products/:id     # Get product details
 
 Cart:
 POST   /store/printify/cart/validate    # Validate cart items
+
+Shipping:
+POST   /store/printify/shipping/rates   # Get shipping rates for items + address
 ```
 
 ## Error Handling & Logging
@@ -320,7 +333,7 @@ logger.error("Failed to sync product", {
 # Development
 npm run build            # Compile TypeScript
 npm run watch           # Development with watch mode
-npm test               # Run test suite (137 tests)
+npm test               # Run test suite (169 tests)
 npm run lint           # ESLint validation
 npm run lint:fix       # Auto-fix linting issues
 
@@ -337,7 +350,7 @@ npm start
 
 ### Common Issues
 1. **TypeScript Compilation Errors**: Ensure using `@medusajs/framework` imports
-2. **Test Failures**: Run `npm test` - all 151 tests must pass
+2. **Test Failures**: Run `npm test` - all tests must pass
 3. **DML Entity Issues**: Check bridge pattern implementation
 4. **API Connection**: Verify Printify API key and shop ID
 5. **Database**: Ensure migrations are run for DML tables
@@ -359,7 +372,7 @@ PRINTIFY_LOG_LEVEL=debug npm run dev
 When working with this plugin:
 
 1. **Always maintain modern import patterns** - use `@medusajs/framework` imports
-2. **Preserve test coverage** - all 137 tests must continue passing
+2. **Preserve test coverage** - all 169 tests must continue passing
 3. **Use DML entities** with bridge compatibility for any model changes
 4. **Follow TypeScript strict typing** - no `any` types in production code
 5. **Implement proper error handling** with retry logic for external APIs
