@@ -53,6 +53,16 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Dynamic Shipping Method**: Order submission now accepts `shipping_method` instead of hardcoding `1` — flows through `CreateOrderRequest`, `preparePrintifyOrderData`, workflow steps, and admin order creation
 - **Test Coverage**: 169/169 tests across 15 suites (4 API client + 7 cache + 7 endpoint tests added)
 
+### ✅ **Phase 9 Complete**: Automation Dashboard + Scheduled Jobs
+- **New Config Field**: `auto_submit_orders` boolean on configuration model (defaults to `false`)
+- **Scheduled Jobs**: `sync-printify-products` and `auto-submit-orders` jobs run every 5 minutes, respecting config flags and sync frequency
+- **Automation Activity Store**: In-memory singleton tracking job run status, timestamps, success/failure counts per configuration
+- **Status Endpoint**: `GET /admin/printify/automation/status` returns config toggles + job activity
+- **Toggle Endpoint**: `PUT /admin/printify/automation/toggle` lightweight toggle for `sync_enabled` and `auto_submit_orders`
+- **Dashboard Widget**: Automation Activity widget with live status, inline Switch toggles, auto-refresh every 30 seconds
+- **Settings Page**: Added auto_submit_orders toggle in Order Auto-Submit section
+- **Test Coverage**: 190/190 tests across 19 suites (5 activity store + 5 sync job + 5 auto-submit job + 6 API endpoint tests added)
+
 ## Key Components
 
 ### Models (DML-based)
@@ -148,7 +158,7 @@ export class PrintifyOrderService {
 ## Testing Requirements
 
 ### Test Coverage
-- **169 tests total** across 15 test suites
+- **190 tests total** across 19 test suites
 - **100% success rate** required for any changes
 - **Critical path coverage** for all user-facing functionality
 - **DML model validation** with both entity and bridge patterns
@@ -162,7 +172,8 @@ tests/
 │   │   ├── cart-validation.test.ts              # 6 cart validation tests
 │   │   ├── storefront-endpoints.test.ts         # 14 storefront tests
 │   │   ├── webhook-endpoints.test.ts             # 16 webhook handler tests
-│   │   └── webhook-admin-endpoints.test.ts      # 5 admin webhook tests
+│   │   ├── webhook-admin-endpoints.test.ts      # 5 admin webhook tests
+│   │   └── automation-endpoints.test.ts         # 6 automation API tests
 │   ├── models/
 │   │   ├── printify-configuration-dml.test.ts   # 13 model tests
 │   │   └── printify-product-dml.test.ts         # 14 model tests
@@ -172,8 +183,12 @@ tests/
 │   │   ├── printify-order-service.test.ts           # 19 service tests
 │   │   ├── printify-api-client-webhooks.test.ts     # 5 API client webhook tests
 │   │   └── printify-api-client-shipping.test.ts     # 4 API client shipping tests
+│   ├── jobs/
+│   │   ├── sync-products-job.test.ts                # 5 sync job tests
+│   │   └── auto-submit-orders-job.test.ts           # 5 auto-submit job tests
 │   ├── utils/
-│   │   └── shipping-cache.test.ts                   # 7 cache tests
+│   │   ├── shipping-cache.test.ts                   # 7 cache tests
+│   │   └── automation-activity.test.ts              # 5 activity store tests
 │   └── ...
 └── setup.ts
 ```
@@ -283,6 +298,10 @@ GET    /admin/printify/webhooks         # List registered webhooks
 POST   /admin/printify/webhooks         # Register new webhook
 DELETE /admin/printify/webhooks/:id     # Remove webhook
 
+Automation:
+GET    /admin/printify/automation/status  # Get automation job status + config
+PUT    /admin/printify/automation/toggle  # Toggle sync_enabled / auto_submit_orders
+
 Orders:
 GET    /admin/printify/orders           # List orders with filters
 POST   /admin/printify/orders           # Create order manually
@@ -327,13 +346,23 @@ logger.error("Failed to sync product", {
 })
 ```
 
+## Scheduled Jobs
+
+```
+src/jobs/
+├── sync-printify-products.ts   # Product sync every 5 min (requires sync_enabled)
+└── auto-submit-orders.ts       # Order auto-submit every 5 min (requires auto_submit_orders)
+```
+
+Both jobs respect their config flags, skip when already running, and track activity in the `automationActivityStore` singleton. The sync job also respects the `sync_frequency` setting.
+
 ## Key Development Commands
 
 ```bash
 # Development
 npm run build            # Compile TypeScript
 npm run watch           # Development with watch mode
-npm test               # Run test suite (169 tests)
+npm test               # Run test suite (190 tests)
 npm run lint           # ESLint validation
 npm run lint:fix       # Auto-fix linting issues
 
@@ -372,7 +401,7 @@ PRINTIFY_LOG_LEVEL=debug npm run dev
 When working with this plugin:
 
 1. **Always maintain modern import patterns** - use `@medusajs/framework` imports
-2. **Preserve test coverage** - all 169 tests must continue passing
+2. **Preserve test coverage** - all 190 tests must continue passing
 3. **Use DML entities** with bridge compatibility for any model changes
 4. **Follow TypeScript strict typing** - no `any` types in production code
 5. **Implement proper error handling** with retry logic for external APIs
