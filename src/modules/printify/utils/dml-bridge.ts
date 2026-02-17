@@ -43,6 +43,8 @@ export class PrintifyOrderBridge {
   // Direct access aliases for API routes
   get line_items() { return this.entity.line_items || this.entity.items; }
   get error_details() { return this.entity.error_details; }
+  get last_error_at() { return this.entity.last_error_at; }
+  get retry_count() { return this.entity.retry_count ?? this.entity.retryCount ?? 0; }
   
   // Legacy compatibility properties
   get statusHistory() { 
