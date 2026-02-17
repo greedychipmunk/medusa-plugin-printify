@@ -71,7 +71,7 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Admin Retry Endpoint**: `POST /admin/printify/orders/:id/retry` resets FAILED orders back to PENDING
 - **Visibility**: Order list/detail responses now expose retry_count, error_details, last_error_at
 - **Activity Tracking**: `orders_dead_lettered` counter in automation activity store
-- **Test Coverage**: 238/238 tests across 25 suites (200 unit + 38 integration tests)
+- **Test Coverage**: 252/252 tests across 26 suites (200 unit + 52 integration tests)
 
 ## Key Components
 
@@ -118,7 +118,7 @@ src/admin/widgets/
 - **TypeScript 5.x** with strict typing enabled
 - **MedusaJS v2.11+** modern import patterns using `@medusajs/framework`
 - **DML entities** for all data models with bridge compatibility
-- **Comprehensive testing** - maintain 100% critical path coverage (238 tests)
+- **Comprehensive testing** - maintain 100% critical path coverage (252 tests)
 - **Error handling** with retry logic and user-friendly messages
 
 ### Import Patterns (CRITICAL)
@@ -168,7 +168,7 @@ export class PrintifyOrderService {
 ## Testing Requirements
 
 ### Test Coverage
-- **238 tests total** across 25 test suites (200 unit + 37 integration)
+- **252 tests total** across 26 test suites (200 unit + 52 integration)
 - **100% success rate** required for any changes
 - **Critical path coverage** for all user-facing functionality
 - **DML model validation** with both entity and bridge patterns
@@ -184,7 +184,8 @@ tests/
 │   ├── order-lifecycle.test.ts                  # 13 order lifecycle tests
 │   ├── product-sync-lifecycle.test.ts           # 10 product sync tests
 │   ├── webhook-handling.test.ts                 # 9 webhook integration tests
-│   └── shipping-rates.test.ts                   # 6 shipping/cache tests
+│   ├── shipping-rates.test.ts                   # 6 shipping/cache tests
+│   └── scheduled-jobs.test.ts                   # 14 sync job + auto-submit job tests
 ├── unit/
 │   ├── api/
 │   │   ├── admin-endpoints.test.ts              # 28 API tests
@@ -384,7 +385,7 @@ Both jobs respect their config flags, skip when already running, and track activ
 # Development
 npm run build            # Compile TypeScript
 npm run watch           # Development with watch mode
-npm test               # Run test suite (238 tests)
+npm test               # Run test suite (252 tests)
 npm run lint           # ESLint validation
 npm run lint:fix       # Auto-fix linting issues
 
@@ -423,7 +424,7 @@ PRINTIFY_LOG_LEVEL=debug npm run dev
 When working with this plugin:
 
 1. **Always maintain modern import patterns** - use `@medusajs/framework` imports
-2. **Preserve test coverage** - all 238 tests must continue passing
+2. **Preserve test coverage** - all 252 tests must continue passing
 3. **Use DML entities** with bridge compatibility for any model changes
 4. **Follow TypeScript strict typing** - no `any` types in production code
 5. **Implement proper error handling** with retry logic for external APIs
