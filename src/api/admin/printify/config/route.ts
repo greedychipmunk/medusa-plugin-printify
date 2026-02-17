@@ -19,6 +19,7 @@ const createConfigSchema = z.object({
   webhook_secret: z.string().optional(),
   sync_enabled: z.boolean().default(true),
   sync_frequency: z.number().min(5).max(1440).default(60),
+  auto_submit_orders: z.boolean().default(false),
 })
 
 const updateConfigSchema = z.object({
@@ -27,6 +28,7 @@ const updateConfigSchema = z.object({
   webhook_secret: z.string().optional(),
   sync_enabled: z.boolean().optional(),
   sync_frequency: z.number().min(5).max(1440).optional(),
+  auto_submit_orders: z.boolean().optional(),
 })
 
 const apiLogger = logger.child("AdminConfigAPI")
@@ -61,6 +63,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
         printify_shop_id: configuration.printify_shop_id,
         sync_enabled: configuration.sync_enabled,
         sync_frequency: configuration.sync_frequency,
+        auto_submit_orders: configuration.auto_submit_orders,
         has_api_key: !!configuration.printify_api_key,
         has_webhook_secret: !!configuration.webhook_secret,
         created_at: configuration.created_at,
@@ -119,6 +122,7 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
         printify_shop_id: configuration?.printify_shop_id,
         sync_enabled: configuration?.sync_enabled,
         sync_frequency: configuration?.sync_frequency,
+        auto_submit_orders: configuration?.auto_submit_orders,
         created_at: configuration?.created_at,
         updated_at: configuration?.updated_at,
       },
@@ -184,6 +188,7 @@ export async function PUT(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       webhook_secret: configData.webhook_secret ?? existing.webhook_secret ?? undefined,
       sync_enabled: configData.sync_enabled ?? existing.sync_enabled,
       sync_frequency: configData.sync_frequency ?? existing.sync_frequency,
+      auto_submit_orders: configData.auto_submit_orders ?? existing.auto_submit_orders,
     })
 
     res.status(200).json({
@@ -195,6 +200,7 @@ export async function PUT(req: AuthenticatedMedusaRequest, res: MedusaResponse):
         printify_shop_id: configuration?.printify_shop_id,
         sync_enabled: configuration?.sync_enabled,
         sync_frequency: configuration?.sync_frequency,
+        auto_submit_orders: configuration?.auto_submit_orders,
         updated_at: configuration?.updated_at,
       },
     })

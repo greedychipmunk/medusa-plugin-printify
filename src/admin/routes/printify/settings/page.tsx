@@ -33,6 +33,7 @@ interface ConfigurationFormData {
   webhook_secret: string
   sync_enabled: boolean
   sync_frequency: number
+  auto_submit_orders: boolean
 }
 
 const SYNC_FREQUENCY_OPTIONS = [
@@ -53,6 +54,7 @@ const PrintifySettingsPage = () => {
     webhook_secret: "",
     sync_enabled: true,
     sync_frequency: 60,
+    auto_submit_orders: false,
   })
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -78,6 +80,7 @@ const PrintifySettingsPage = () => {
             printify_shop_id: data.data.printify_shop_id,
             sync_enabled: data.data.sync_enabled,
             sync_frequency: data.data.sync_frequency,
+            auto_submit_orders: data.data.auto_submit_orders ?? false,
           }))
         }
       }
@@ -321,6 +324,26 @@ const PrintifySettingsPage = () => {
                   ))}
                 </Select.Content>
               </Select>
+            </div>
+          </div>
+        </div>
+
+        {/* Order Auto-Submit Section */}
+        <div className="px-6 py-4">
+          <Heading level="h3" className="mb-4">Order Auto-Submit</Heading>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="auto-submit-orders">Auto-Submit Orders</Label>
+                <Text size="small" className="text-ui-fg-subtle">
+                  Automatically submit pending orders to Printify
+                </Text>
+              </div>
+              <Switch
+                id="auto-submit-orders"
+                checked={formData.auto_submit_orders}
+                onCheckedChange={(checked) => handleInputChange("auto_submit_orders", checked)}
+              />
             </div>
           </div>
         </div>

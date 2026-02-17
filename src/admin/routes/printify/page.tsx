@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
 import {
   Button,
+  Switch,
   StatusBadge,
   Text,
   Heading,
@@ -32,6 +33,187 @@ interface RecentOrder {
   total_amount: number
   currency: string
   created_at: string
+}
+
+interface AutomationStatus {
+  configuration: {
+    sync_enabled: boolean
+    sync_frequency: number
+    auto_submit_orders: boolean
+  }
+  product_sync: {
+    last_sync_at?: string
+    last_sync_status: string
+    last_sync_duration_ms?: number
+    products_synced: number
+    products_failed: number
+    error_message?: string
+  }
+  order_auto_submit: {
+    last_run_at?: string
+    last_run_status: string
+    orders_submitted: number
+    orders_failed: number
+    error_message?: string
+  }
+  updated_at: string
+}
+
+const ACTIVITY_STATUS_COLORS: Record<string, "green" | "blue" | "red" | "grey"> = {
+  success: "green",
+  running: "blue",
+  failed: "red",
+  idle: "grey",
+}
+
+function formatRelativeTime(dateStr?: string): string {
+  if (!dateStr) return "Never"
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return "Just now"
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`
+  const days = Math.floor(hours / 24)
+  return `${days} day${days === 1 ? "" : "s"} ago`
+}
+
+const AutomationActivityWidget = () => {
+  const [automation, setAutomation] = useState<AutomationStatus | null>(null)
+  const [isToggling, setIsToggling] = useState(false)
+
+  const loadAutomationStatus = async () => {
+    try {
+      const res = await fetch("/admin/printify/automation/status")
+      const data = await res.json()
+      if (data.success) {
+        setAutomation(data.data)
+      }
+    } catch {
+      // Silently fail — dashboard still works without this widget
+    }
+  }
+
+  useEffect(() => {
+    loadAutomationStatus()
+    const interval = setInterval(loadAutomationStatus, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const handleToggle = async (field: "sync_enabled" | "auto_submit_orders", value: boolean) => {
+    setIsToggling(true)
+    try {
+      const res = await fetch("/admin/printify/automation/toggle", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAutomation((prev) =>
+          prev ? { ...prev, configuration: { ...prev.configuration, [field]: value } } : prev
+        )
+        toast.success(`${field === "sync_enabled" ? "Product sync" : "Order auto-submit"} ${value ? "enabled" : "disabled"}`)
+      } else {
+        toast.error("Failed to update setting")
+      }
+    } catch {
+      toast.error("Failed to update setting")
+    } finally {
+      setIsToggling(false)
+    }
+  }
+
+  if (!automation) return null
+
+  return (
+    <Container className="mt-4">
+      <Header title="Automation Activity" subtitle="Scheduled job status and controls" />
+      <div className="grid grid-cols-1 gap-4 px-6 py-4 md:grid-cols-2">
+        {/* Product Sync Card */}
+        <div className="rounded-lg border border-ui-border-base p-4">
+          <div className="flex items-center justify-between mb-3">
+            <Heading level="h3">Product Sync</Heading>
+            <Switch
+              checked={automation.configuration.sync_enabled}
+              onCheckedChange={(checked) => handleToggle("sync_enabled", checked)}
+              disabled={isToggling}
+            />
+          </div>
+          {automation.configuration.sync_enabled && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Text size="small" className="text-ui-fg-subtle">Last run</Text>
+                <Text size="small">{formatRelativeTime(automation.product_sync.last_sync_at)}</Text>
+              </div>
+              <div className="flex items-center justify-between">
+                <Text size="small" className="text-ui-fg-subtle">Status</Text>
+                <StatusBadge color={ACTIVITY_STATUS_COLORS[automation.product_sync.last_sync_status] || "grey"}>
+                  {automation.product_sync.last_sync_status}
+                </StatusBadge>
+              </div>
+              <div className="flex items-center justify-between">
+                <Text size="small" className="text-ui-fg-subtle">Products synced</Text>
+                <Text size="small">{automation.product_sync.products_synced}</Text>
+              </div>
+              {automation.product_sync.products_failed > 0 && (
+                <div className="flex items-center justify-between">
+                  <Text size="small" className="text-ui-fg-subtle">Failed</Text>
+                  <Text size="small" className="text-ui-tag-red-text">{automation.product_sync.products_failed}</Text>
+                </div>
+              )}
+              {automation.product_sync.error_message && (
+                <div className="rounded bg-ui-tag-red-bg p-2 mt-2">
+                  <Text size="xsmall" className="text-ui-tag-red-text">{automation.product_sync.error_message}</Text>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Order Auto-Submit Card */}
+        <div className="rounded-lg border border-ui-border-base p-4">
+          <div className="flex items-center justify-between mb-3">
+            <Heading level="h3">Order Auto-Submit</Heading>
+            <Switch
+              checked={automation.configuration.auto_submit_orders}
+              onCheckedChange={(checked) => handleToggle("auto_submit_orders", checked)}
+              disabled={isToggling}
+            />
+          </div>
+          {automation.configuration.auto_submit_orders && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Text size="small" className="text-ui-fg-subtle">Last run</Text>
+                <Text size="small">{formatRelativeTime(automation.order_auto_submit.last_run_at)}</Text>
+              </div>
+              <div className="flex items-center justify-between">
+                <Text size="small" className="text-ui-fg-subtle">Status</Text>
+                <StatusBadge color={ACTIVITY_STATUS_COLORS[automation.order_auto_submit.last_run_status] || "grey"}>
+                  {automation.order_auto_submit.last_run_status}
+                </StatusBadge>
+              </div>
+              <div className="flex items-center justify-between">
+                <Text size="small" className="text-ui-fg-subtle">Orders submitted</Text>
+                <Text size="small">{automation.order_auto_submit.orders_submitted}</Text>
+              </div>
+              {automation.order_auto_submit.orders_failed > 0 && (
+                <div className="flex items-center justify-between">
+                  <Text size="small" className="text-ui-fg-subtle">Failed</Text>
+                  <Text size="small" className="text-ui-tag-red-text">{automation.order_auto_submit.orders_failed}</Text>
+                </div>
+              )}
+              {automation.order_auto_submit.error_message && (
+                <div className="rounded bg-ui-tag-red-bg p-2 mt-2">
+                  <Text size="xsmall" className="text-ui-tag-red-text">{automation.order_auto_submit.error_message}</Text>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </Container>
+  )
 }
 
 const STATUS_COLORS: Record<string, "green" | "orange" | "blue" | "red" | "grey" | "purple"> = {
@@ -166,6 +348,9 @@ const PrintifyDashboard = () => {
           )}
         </div>
       </Container>
+
+      {/* Automation Activity */}
+      <AutomationActivityWidget />
 
       {/* Quick Actions */}
       <Container className="mt-4">

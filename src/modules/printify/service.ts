@@ -30,6 +30,7 @@ export interface CreateConfigurationParams {
   webhook_secret?: string
   sync_enabled?: boolean
   sync_frequency?: number
+  auto_submit_orders?: boolean
 }
 
 export interface UpdateConfigurationParams {
@@ -38,6 +39,7 @@ export interface UpdateConfigurationParams {
   webhook_secret?: string
   sync_enabled?: boolean
   sync_frequency?: number
+  auto_submit_orders?: boolean
 }
 
 export interface ConfigurationTestResult {
@@ -222,6 +224,7 @@ class PrintifyModuleService extends MedusaService({
         webhook_secret: data.webhook_secret ?? null,
         sync_enabled: data.sync_enabled ?? false,
         sync_frequency: data.sync_frequency ?? 60,
+        auto_submit_orders: data.auto_submit_orders ?? false,
       },
     ])
     return created[0]

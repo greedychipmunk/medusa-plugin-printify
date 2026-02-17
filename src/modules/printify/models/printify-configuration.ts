@@ -13,6 +13,7 @@ export interface PrintifyConfigurationData {
   webhook_secret?: string;
   sync_enabled?: boolean;
   sync_frequency?: number;
+  auto_submit_orders?: boolean;
 }
 
 const PrintifyConfiguration = model.define("PrintifyConfiguration", {
@@ -23,6 +24,7 @@ const PrintifyConfiguration = model.define("PrintifyConfiguration", {
   webhook_secret: model.text().nullable(), // encrypted
   sync_enabled: model.boolean().default(false),
   sync_frequency: model.number().default(60), // minutes
+  auto_submit_orders: model.boolean().default(false),
 });
 
 export default PrintifyConfiguration;
