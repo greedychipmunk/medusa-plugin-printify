@@ -37,6 +37,7 @@ const createOrderSchema = z.object({
   shipping_cost: z.number().min(0).optional(),
   tax_amount: z.number().min(0).optional(),
   discount_amount: z.number().min(0).optional(),
+  shipping_method: z.number().int().positive().optional(),
 })
 
 const apiLogger = logger.child("AdminOrderAPI")
@@ -171,6 +172,7 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
       shippingCost: data.shipping_cost,
       taxAmount: data.tax_amount,
       discountAmount: data.discount_amount,
+      shippingMethod: data.shipping_method,
     })
 
     res.status(201).json({
