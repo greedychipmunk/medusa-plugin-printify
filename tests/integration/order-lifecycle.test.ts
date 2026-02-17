@@ -180,7 +180,7 @@ describe("Integration: Order Lifecycle", () => {
     expect(stored.submitted_at).toBeDefined()
   })
 
-  it("submits with default shipping_method (custom not persisted to store)", async () => {
+  it("submits with custom shipping_method", async () => {
     mockAxios.post.mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
 
     const created = await ctx.service.createOrderFromCart({
@@ -191,15 +191,11 @@ describe("Integration: Order Lifecycle", () => {
       shippingMethod: 2,
     })
 
-    // NOTE: shippingMethod is set on the bridge returned by createOrderFromCart,
-    // but submitPrintifyOrder re-fetches from the store via getOrderBridge(),
-    // where shippingMethod isn't a persisted field. This is a known limitation —
-    // the order uses the default shipping_method (1) on submit.
     const apiClient = buildApiClient(mockAxios)
     await ctx.service.submitPrintifyOrder(created.id, apiClient)
 
     const payload = mockAxios.post.mock.calls[0][1]
-    expect(payload.shipping_method).toBe(1) // defaults because shippingMethod isn't persisted
+    expect(payload.shipping_method).toBe(2)
   })
 
   it("throws on invalid API response and keeps order PENDING", async () => {

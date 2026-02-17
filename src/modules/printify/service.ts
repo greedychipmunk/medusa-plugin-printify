@@ -595,6 +595,7 @@ class PrintifyModuleService extends MedusaService({
         line_items: request.cartItems as any,
         shipping_address: request.shippingAddress,
         total_price: totalPrice,
+        shipping_method: request.shippingMethod || 1,
       },
     ] as any)
     const created = Array.isArray(results) ? results[0] : results
@@ -697,6 +698,7 @@ class PrintifyModuleService extends MedusaService({
         currency: "USD",
       },
       items: entity.line_items || entity.items,
+      shippingMethod: entity.shipping_method || entity.shippingMethod || 1,
       shippingAddress: entity.shipping_address || entity.shippingAddress,
       createdAt: entity.created_at || entity.createdAt,
       updatedAt: entity.updated_at || entity.updatedAt,
