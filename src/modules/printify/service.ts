@@ -703,8 +703,10 @@ class PrintifyModuleService extends MedusaService({
       createdAt: entity.created_at || entity.createdAt,
       updatedAt: entity.updated_at || entity.updatedAt,
       submittedAt: entity.submitted_at || entity.submittedAt,
-      retryCount: entity.retryCount || 0,
+      retryCount: entity.retry_count ?? entity.retryCount ?? 0,
       maxRetries: entity.maxRetries || 3,
+      error_details: entity.error_details ?? null,
+      last_error_at: entity.last_error_at ?? null,
     })
   }
 

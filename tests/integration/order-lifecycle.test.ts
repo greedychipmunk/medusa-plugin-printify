@@ -409,4 +409,48 @@ describe("Integration: Order Lifecycle", () => {
     expect(stats.failed).toBe(1)
     expect(stats.currency).toBe("USD")
   })
+
+  it("listOrdersFiltered exposes retry_count, error_details, last_error_at on bridges", async () => {
+    const errorDate = new Date("2026-02-01T12:00:00Z")
+    ctx.stores.orders.create([
+      {
+        id: "enrich_1",
+        medusa_order_id: "med_enrich_1",
+        status: "failed",
+        total_price: 3000,
+        line_items: [],
+        shipping_address: {},
+        retry_count: 3,
+        error_details: "API timeout after 3 attempts",
+        last_error_at: errorDate,
+      },
+      {
+        id: "enrich_2",
+        medusa_order_id: "med_enrich_2",
+        status: "pending",
+        total_price: 2000,
+        line_items: [],
+        shipping_address: {},
+        retry_count: 0,
+        error_details: null,
+        last_error_at: null,
+      },
+    ])
+
+    const result = await ctx.service.listOrdersFiltered({ status: ["failed"] })
+    expect(result.orders).toHaveLength(1)
+
+    const failedOrder = result.orders[0]
+    expect(failedOrder.retryCount).toBe(3)
+    expect(failedOrder.retry_count).toBe(3)
+    expect(failedOrder.error_details).toBe("API timeout after 3 attempts")
+    expect(failedOrder.last_error_at).toEqual(errorDate)
+    expect(failedOrder.lastError).toBe("API timeout after 3 attempts")
+
+    const pendingResult = await ctx.service.listOrdersFiltered({ status: ["pending"] })
+    const pendingOrder = pendingResult.orders[0]
+    expect(pendingOrder.retryCount).toBe(0)
+    expect(pendingOrder.error_details).toBeNull()
+    expect(pendingOrder.last_error_at).toBeNull()
+  })
 })
