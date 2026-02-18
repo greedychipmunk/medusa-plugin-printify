@@ -168,6 +168,117 @@ describe('Admin API Endpoints', () => {
     });
   });
 
+  describe('GET /admin/printify/orders - Query Validation', () => {
+    const { GET: ordersGET } = require('../../../src/api/admin/printify/orders/route')
+
+    function buildOrdersReq(query: Record<string, any>): any {
+      return {
+        query,
+        scope: {
+          resolve: jest.fn().mockReturnValue({
+            listOrdersFiltered: jest.fn().mockResolvedValue({
+              orders: [],
+              total: 0,
+              hasMore: false,
+            }),
+          }),
+        },
+      }
+    }
+
+    function buildRes(): any {
+      return {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      }
+    }
+
+    it('should return 400 for negative limit', async () => {
+      const res = buildRes()
+      await ordersGET(buildOrdersReq({ limit: '-5' }), res)
+      expect(res.status).toHaveBeenCalledWith(400)
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Validation error' })
+      )
+    })
+
+    it('should return 400 for limit=0', async () => {
+      const res = buildRes()
+      await ordersGET(buildOrdersReq({ limit: '0' }), res)
+      expect(res.status).toHaveBeenCalledWith(400)
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Validation error' })
+      )
+    })
+
+    it('should return 400 for limit exceeding max (200)', async () => {
+      const res = buildRes()
+      await ordersGET(buildOrdersReq({ limit: '200' }), res)
+      expect(res.status).toHaveBeenCalledWith(400)
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Validation error' })
+      )
+    })
+
+    it('should return 400 for non-numeric offset', async () => {
+      const res = buildRes()
+      await ordersGET(buildOrdersReq({ offset: 'abc' }), res)
+      expect(res.status).toHaveBeenCalledWith(400)
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Validation error' })
+      )
+    })
+
+    it('should return 400 for negative offset', async () => {
+      const res = buildRes()
+      await ordersGET(buildOrdersReq({ offset: '-1' }), res)
+      expect(res.status).toHaveBeenCalledWith(400)
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Validation error' })
+      )
+    })
+
+    it('should return 400 for invalid status value', async () => {
+      const res = buildRes()
+      await ordersGET(buildOrdersReq({ status: 'INVALID' }), res)
+      expect(res.status).toHaveBeenCalledWith(400)
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Validation error' })
+      )
+    })
+
+    it('should return 400 for invalid sort_by value', async () => {
+      const res = buildRes()
+      await ordersGET(buildOrdersReq({ sort_by: 'invalid_field' }), res)
+      expect(res.status).toHaveBeenCalledWith(400)
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Validation error' })
+      )
+    })
+
+    it('should accept valid query parameters', async () => {
+      const res = buildRes()
+      await ordersGET(buildOrdersReq({ limit: '10', offset: '5', status: 'pending', sort_by: 'createdAt', sort_order: 'asc' }), res)
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true })
+      )
+    })
+
+    it('should use defaults when no query params provided', async () => {
+      const res = buildRes()
+      await ordersGET(buildOrdersReq({}), res)
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            limit: 20,
+            offset: 0,
+          }),
+        })
+      )
+    })
+  });
+
   describe('Error Handling', () => {
     it('should handle database connection errors', async () => {
       // This test will verify database error handling

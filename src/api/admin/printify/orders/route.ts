@@ -40,42 +40,62 @@ const createOrderSchema = z.object({
   shipping_method: z.number().int().positive().optional(),
 })
 
+const orderStatusValues = ["pending", "validated", "submitted", "processing", "shipped", "delivered", "cancelled", "failed"] as const
+
+const listOrdersQuerySchema = z.object({
+  status: z.union([
+    z.enum(orderStatusValues),
+    z.array(z.enum(orderStatusValues)),
+  ]).optional(),
+  customer_id: z.string().optional(),
+  date_from: z.string().datetime({ offset: true }).optional()
+    .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+  date_to: z.string().datetime({ offset: true }).optional()
+    .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+  limit: z.string().transform((v) => parseInt(v, 10)).pipe(z.number().int().min(1).max(100)).default("20"),
+  offset: z.string().transform((v) => parseInt(v, 10)).pipe(z.number().int().min(0)).default("0"),
+  sort_by: z.enum(["createdAt", "updatedAt", "status"]).default("createdAt"),
+  sort_order: z.enum(["asc", "desc"]).default("desc"),
+})
+
 const apiLogger = logger.child("AdminOrderAPI")
 
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   try {
     const printifyService: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
 
-    const {
-      status,
-      customer_id,
-      date_from,
-      date_to,
-      limit = 20,
-      offset = 0,
-      sort_by = "createdAt",
-      sort_order = "desc",
-    } = req.query
+    const queryValidation = listOrdersQuerySchema.safeParse(req.query)
+    if (!queryValidation.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation error",
+        message: "Invalid query parameters",
+        details: queryValidation.error.issues,
+      })
+      return
+    }
+
+    const query = queryValidation.data
 
     const options: OrderListOptions = {
-      limit: Number(limit),
-      offset: Number(offset),
-      sortBy: sort_by as "createdAt" | "updatedAt" | "status",
-      sortOrder: sort_order as "asc" | "desc",
+      limit: query.limit,
+      offset: query.offset,
+      sortBy: query.sort_by,
+      sortOrder: query.sort_order,
     }
 
-    if (status) {
-      const statusArray = Array.isArray(status) ? status : [status]
-      options.status = statusArray.map((s) => s as PrintifyOrderStatus)
+    if (query.status) {
+      const statusArray = Array.isArray(query.status) ? query.status : [query.status]
+      options.status = statusArray as PrintifyOrderStatus[]
     }
-    if (customer_id) {
-      options.customerId = customer_id as string
+    if (query.customer_id) {
+      options.customerId = query.customer_id
     }
-    if (date_from) {
-      options.dateFrom = new Date(date_from as string)
+    if (query.date_from) {
+      options.dateFrom = new Date(query.date_from)
     }
-    if (date_to) {
-      options.dateTo = new Date(date_to as string)
+    if (query.date_to) {
+      options.dateTo = new Date(query.date_to)
     }
 
     const result = await printifyService.listOrdersFiltered(options)
@@ -101,8 +121,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
           last_error_at: order.entity?.last_error_at ?? null,
         })),
         count: result.total,
-        offset: Number(offset),
-        limit: Number(limit),
+        offset: query.offset,
+        limit: query.limit,
         has_more: result.hasMore,
       },
     })
