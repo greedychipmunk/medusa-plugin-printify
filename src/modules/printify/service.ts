@@ -20,7 +20,7 @@ import { PrintifyApiClient, PrintifyProduct as ApiProduct } from "./services/pri
 import { PrintifyOrderBridge } from "./utils/dml-bridge"
 import { logger } from "./utils/logger"
 import { PrintifyPluginError, ErrorCode, ErrorSeverity, ErrorFactory } from "./utils/error-handling"
-import { DEFAULT_SHIPPING_METHOD, normalizePrintifyAddress } from "./utils/order-utils"
+import { DEFAULT_SHIPPING_METHOD, DEFAULT_MAX_ORDER_RETRIES, normalizePrintifyAddress } from "./utils/order-utils"
 
 // ── Interfaces ──────────────────────────────────────────────────────
 
@@ -32,6 +32,7 @@ export interface CreateConfigurationParams {
   sync_enabled?: boolean
   sync_frequency?: number
   auto_submit_orders?: boolean
+  max_order_retries?: number
 }
 
 export interface UpdateConfigurationParams {
@@ -41,6 +42,7 @@ export interface UpdateConfigurationParams {
   sync_enabled?: boolean
   sync_frequency?: number
   auto_submit_orders?: boolean
+  max_order_retries?: number
 }
 
 export interface ConfigurationTestResult {
@@ -631,7 +633,7 @@ class PrintifyModuleService extends MedusaService({
       updatedAt: created?.updated_at,
       submittedAt: undefined,
       retryCount: 0,
-      maxRetries: 3,
+      maxRetries: DEFAULT_MAX_ORDER_RETRIES,
     }
 
     // Create link to Medusa order
@@ -713,7 +715,7 @@ class PrintifyModuleService extends MedusaService({
       updatedAt: entity.updated_at || entity.updatedAt,
       submittedAt: entity.submitted_at || entity.submittedAt,
       retryCount: entity.retry_count ?? entity.retryCount ?? 0,
-      maxRetries: entity.maxRetries || 3,
+      maxRetries: entity.maxRetries || DEFAULT_MAX_ORDER_RETRIES,
       error_details: entity.error_details ?? null,
       last_error_at: entity.last_error_at ?? null,
     })

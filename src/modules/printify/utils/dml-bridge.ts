@@ -7,8 +7,9 @@
  * interface from the underlying DML model shape.
  */
 
-import type { 
-  PrintifyOrderType, 
+import { DEFAULT_MAX_ORDER_RETRIES } from "./order-utils"
+import type {
+  PrintifyOrderType,
   PrintifyConfigurationType,
   PrintifyOrderShippingAddress 
 } from '../types';
@@ -35,7 +36,7 @@ export class PrintifyOrderBridge {
   get customerId() { return this.entity.customerId; }
   get customerEmail() { return this.entity.customerEmail; }
   get retryCount() { return this.entity.retry_count ?? this.entity.retryCount ?? 0; }
-  get maxRetries() { return this.entity.maxRetries || 3; }
+  get maxRetries() { return this.entity.maxRetries || DEFAULT_MAX_ORDER_RETRIES; }
   get lastError() { return this.entity.error_details; }
   get tracking() { return this.entity.tracking; }
   get shippingMethod(): number | undefined { return this.entity.shippingMethod; }
