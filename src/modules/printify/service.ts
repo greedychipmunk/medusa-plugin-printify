@@ -20,7 +20,7 @@ import { PrintifyApiClient, PrintifyProduct as ApiProduct } from "./services/pri
 import { PrintifyOrderBridge } from "./utils/dml-bridge"
 import { logger } from "./utils/logger"
 import { PrintifyPluginError, ErrorCode, ErrorSeverity, ErrorFactory } from "./utils/error-handling"
-import { DEFAULT_SHIPPING_METHOD, DEFAULT_MAX_ORDER_RETRIES, normalizePrintifyAddress } from "./utils/order-utils"
+import { DEFAULT_SHIPPING_METHOD, DEFAULT_MAX_ORDER_RETRIES, normalizePrintifyAddress, canTransitionTo } from "./utils/order-utils"
 
 // ── Interfaces ──────────────────────────────────────────────────────
 
@@ -905,6 +905,15 @@ class PrintifyModuleService extends MedusaService({
 
   async updateOrderStatus(orderId: string, update: OrderStatusUpdate): Promise<PrintifyOrderBridge> {
     const order = await this.getOrderBridge(orderId)
+
+    const currentStatus = order.status as PrintifyOrderStatus
+    if (!canTransitionTo(currentStatus, update.status)) {
+      throw new PrintifyPluginError(
+        ErrorCode.VALIDATION_ERROR,
+        `Invalid status transition: ${currentStatus} → ${update.status}`,
+        ErrorSeverity.MEDIUM,
+      )
+    }
 
     order.updateStatus(update.status, update.note, update.printifyOrderId)
 

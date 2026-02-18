@@ -7,7 +7,7 @@
  * interface from the underlying DML model shape.
  */
 
-import { DEFAULT_MAX_ORDER_RETRIES } from "./order-utils"
+import { DEFAULT_MAX_ORDER_RETRIES, ORDER_TRANSITIONS, canTransitionTo } from "./order-utils"
 import type {
   PrintifyOrderType,
   PrintifyConfigurationType,
@@ -96,22 +96,20 @@ export class PrintifyOrderBridge {
     this.entity.updated_at = new Date();
   }
 
+  canTransitionTo(target: PrintifyOrderStatus): boolean {
+    return canTransitionTo(this.entity.status as PrintifyOrderStatus, target);
+  }
+
   canSubmit(): boolean {
-    return this.entity.status === PrintifyOrderStatus.VALIDATED || 
-           this.entity.status === PrintifyOrderStatus.PENDING;
+    return canTransitionTo(this.entity.status as PrintifyOrderStatus, PrintifyOrderStatus.SUBMITTED);
   }
 
   canCancel(): boolean {
-    return this.entity.status !== PrintifyOrderStatus.CANCELLED &&
-           this.entity.status !== PrintifyOrderStatus.DELIVERED;
+    return canTransitionTo(this.entity.status as PrintifyOrderStatus, PrintifyOrderStatus.CANCELLED);
   }
 
   isFinalStatus(): boolean {
-    return [
-      PrintifyOrderStatus.DELIVERED,
-      PrintifyOrderStatus.CANCELLED,
-      PrintifyOrderStatus.FAILED
-    ].includes(this.entity.status as PrintifyOrderStatus);
+    return (ORDER_TRANSITIONS[this.entity.status as PrintifyOrderStatus]?.length ?? 0) === 0;
   }
 
   getFormattedTotal(): string {

@@ -5,11 +5,33 @@
  * the service layer and workflow steps.
  */
 
+import { PrintifyOrderStatus } from "../models/printify-order"
+
 /** Default Printify shipping method ID used when none is specified. */
 export const DEFAULT_SHIPPING_METHOD = 1
 
 /** Default maximum submission retries before an order is dead-lettered. */
 export const DEFAULT_MAX_ORDER_RETRIES = 3
+
+/**
+ * Allowed state transitions for order lifecycle.
+ * Terminal states (DELIVERED, CANCELLED) have no outgoing transitions.
+ * FAILED can only transition back to PENDING (admin retry).
+ */
+export const ORDER_TRANSITIONS: Record<PrintifyOrderStatus, PrintifyOrderStatus[]> = {
+  [PrintifyOrderStatus.PENDING]:    [PrintifyOrderStatus.VALIDATED, PrintifyOrderStatus.SUBMITTED, PrintifyOrderStatus.CANCELLED, PrintifyOrderStatus.FAILED],
+  [PrintifyOrderStatus.VALIDATED]:  [PrintifyOrderStatus.SUBMITTED, PrintifyOrderStatus.CANCELLED, PrintifyOrderStatus.FAILED],
+  [PrintifyOrderStatus.SUBMITTED]:  [PrintifyOrderStatus.PROCESSING, PrintifyOrderStatus.CANCELLED, PrintifyOrderStatus.FAILED],
+  [PrintifyOrderStatus.PROCESSING]: [PrintifyOrderStatus.SHIPPED, PrintifyOrderStatus.CANCELLED, PrintifyOrderStatus.FAILED],
+  [PrintifyOrderStatus.SHIPPED]:    [PrintifyOrderStatus.DELIVERED, PrintifyOrderStatus.CANCELLED],
+  [PrintifyOrderStatus.DELIVERED]:  [],
+  [PrintifyOrderStatus.CANCELLED]:  [],
+  [PrintifyOrderStatus.FAILED]:     [PrintifyOrderStatus.PENDING],
+}
+
+export function canTransitionTo(from: PrintifyOrderStatus, to: PrintifyOrderStatus): boolean {
+  return ORDER_TRANSITIONS[from]?.includes(to) ?? false
+}
 
 /**
  * Normalizes a shipping address that may use camelCase (Medusa)

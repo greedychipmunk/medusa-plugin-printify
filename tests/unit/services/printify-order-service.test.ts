@@ -291,6 +291,72 @@ describe('PrintifyOrderService (via PrintifyModuleService)', () => {
     });
   });
 
+  describe('order status transition validation', () => {
+    it('should reject invalid status transitions in updateOrderStatus', async () => {
+      const cartItems = [createMockCartItem()];
+      const order = await service.createOrderFromCart({
+        medusaOrderId: 'medusa-order-1',
+        customerEmail: 'john.doe@example.com',
+        cartItems,
+        shippingAddress: mockShippingAddress,
+      });
+
+      // PENDING → DELIVERED is not allowed
+      await expect(
+        service.updateOrderStatus(order.id, {
+          status: PrintifyOrderStatus.DELIVERED,
+          note: 'Skip to delivered',
+        })
+      ).rejects.toThrow(PrintifyPluginError);
+
+      await expect(
+        service.updateOrderStatus(order.id, {
+          status: PrintifyOrderStatus.DELIVERED,
+        })
+      ).rejects.toThrow(/Invalid status transition/);
+    });
+
+    it('should allow valid status transitions in updateOrderStatus', async () => {
+      const cartItems = [createMockCartItem()];
+      const order = await service.createOrderFromCart({
+        medusaOrderId: 'medusa-order-1',
+        customerEmail: 'john.doe@example.com',
+        cartItems,
+        shippingAddress: mockShippingAddress,
+      });
+
+      // PENDING → SUBMITTED is allowed
+      const updated = await service.updateOrderStatus(order.id, {
+        status: PrintifyOrderStatus.SUBMITTED,
+        note: 'Submitting order',
+      });
+
+      expect(updated.status).toBe(PrintifyOrderStatus.SUBMITTED);
+    });
+
+    it('should reject transitions from terminal states', async () => {
+      const cartItems = [createMockCartItem()];
+      const order = await service.createOrderFromCart({
+        medusaOrderId: 'medusa-order-1',
+        customerEmail: 'john.doe@example.com',
+        cartItems,
+        shippingAddress: mockShippingAddress,
+      });
+
+      // Move to CANCELLED (terminal)
+      await service.updateOrderStatus(order.id, {
+        status: PrintifyOrderStatus.CANCELLED,
+      });
+
+      // CANCELLED → PENDING is not allowed
+      await expect(
+        service.updateOrderStatus(order.id, {
+          status: PrintifyOrderStatus.PENDING,
+        })
+      ).rejects.toThrow(/Invalid status transition/);
+    });
+  });
+
   describe('order cancellation', () => {
     it('should cancel order before submission', async () => {
       const cartItems = [createMockCartItem()];
