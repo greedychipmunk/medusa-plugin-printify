@@ -6,8 +6,8 @@ import { logger } from "../../../../modules/printify/utils/logger"
 import { PrintifyPluginError } from "../../../../modules/printify/utils/error-handling"
 
 const listProductsQuerySchema = z.object({
-  page: z.string().transform((val) => parseInt(val, 10)).default("1"),
-  limit: z.string().transform((val) => parseInt(val, 10)).default("20"),
+  page: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().int().min(1)).default("1"),
+  limit: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().int().min(1).max(100)).default("20"),
   enabled: z.enum(["true", "false"]).optional().transform((val) => (val ? val === "true" : undefined)),
   search: z.string().optional(),
   sort: z.enum(["title", "created_at", "updated_at", "last_sync_at"]).default("updated_at"),
