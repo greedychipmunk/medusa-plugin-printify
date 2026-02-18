@@ -1,10 +1,10 @@
 /**
  * DML Bridge Utilities
- * 
- * Temporary bridge functions to provide class-like methods for DML entities.
- * This allows existing service code to work with DML entities without major refactoring.
- * 
- * TODO: Remove this bridge in Phase 4 when services are fully modernized for DML patterns.
+ *
+ * Provides class-like getters (camelCase) over DML entities (snake_case),
+ * giving downstream consumers a stable API regardless of storage format.
+ * This bridge is intentional and permanent — it decouples the public
+ * interface from the underlying DML model shape.
  */
 
 import type { 
