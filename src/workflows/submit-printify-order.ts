@@ -7,6 +7,7 @@ import {
 import { PRINTIFY_MODULE } from "../modules/printify"
 import type PrintifyModuleService from "../modules/printify/service"
 import { PrintifyOrderStatus } from "../modules/printify/models/printify-order"
+import { DEFAULT_SHIPPING_METHOD, normalizePrintifyAddress } from "../modules/printify/utils/order-utils"
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -65,21 +66,9 @@ const submitToPrintifyStep = createStep(
             ]
           : undefined,
       })),
-      shipping_method: input.shipping_method || order.shippingMethod || 1,
+      shipping_method: input.shipping_method || order.shippingMethod || DEFAULT_SHIPPING_METHOD,
       send_shipping_notification: true,
-      address_to: {
-        first_name: order.shippingAddress.firstName || order.shippingAddress.first_name,
-        last_name: order.shippingAddress.lastName || order.shippingAddress.last_name,
-        email: order.shippingAddress.email,
-        phone: order.shippingAddress.phone || "",
-        company: order.shippingAddress.company || "",
-        address1: order.shippingAddress.address1,
-        address2: order.shippingAddress.address2 || "",
-        city: order.shippingAddress.city,
-        state_code: order.shippingAddress.state || order.shippingAddress.region || "",
-        zip: order.shippingAddress.zip,
-        country_code: order.shippingAddress.country,
-      },
+      address_to: normalizePrintifyAddress(order.shippingAddress),
     }
 
     const response = await apiClient.createOrder(printifyOrderData)

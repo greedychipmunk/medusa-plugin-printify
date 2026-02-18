@@ -20,6 +20,7 @@ import { PrintifyApiClient, PrintifyProduct as ApiProduct } from "./services/pri
 import { PrintifyOrderBridge } from "./utils/dml-bridge"
 import { logger } from "./utils/logger"
 import { PrintifyPluginError, ErrorCode, ErrorSeverity, ErrorFactory } from "./utils/error-handling"
+import { DEFAULT_SHIPPING_METHOD, normalizePrintifyAddress } from "./utils/order-utils"
 
 // ── Interfaces ──────────────────────────────────────────────────────
 
@@ -603,7 +604,7 @@ class PrintifyModuleService extends MedusaService({
         line_items: request.cartItems as any,
         shipping_address: request.shippingAddress,
         total_price: totalPrice,
-        shipping_method: request.shippingMethod || 1,
+        shipping_method: request.shippingMethod || DEFAULT_SHIPPING_METHOD,
       },
     ] as any)
     const created = Array.isArray(results) ? results[0] : results
@@ -706,7 +707,7 @@ class PrintifyModuleService extends MedusaService({
         currency: "USD",
       },
       items: entity.line_items || entity.items,
-      shippingMethod: entity.shipping_method || entity.shippingMethod || 1,
+      shippingMethod: entity.shipping_method || entity.shippingMethod || DEFAULT_SHIPPING_METHOD,
       shippingAddress: entity.shipping_address || entity.shippingAddress,
       createdAt: entity.created_at || entity.createdAt,
       updatedAt: entity.updated_at || entity.updatedAt,
@@ -988,21 +989,9 @@ class PrintifyModuleService extends MedusaService({
             ]
           : undefined,
       })),
-      shipping_method: order.shippingMethod || 1,
+      shipping_method: order.shippingMethod || DEFAULT_SHIPPING_METHOD,
       send_shipping_notification: true,
-      address_to: {
-        first_name: order.shippingAddress.firstName || order.shippingAddress.first_name,
-        last_name: order.shippingAddress.lastName || order.shippingAddress.last_name,
-        email: order.shippingAddress.email,
-        phone: order.shippingAddress.phone || "",
-        company: order.shippingAddress.company || "",
-        address1: order.shippingAddress.address1,
-        address2: order.shippingAddress.address2 || "",
-        city: order.shippingAddress.city,
-        state_code: order.shippingAddress.state || order.shippingAddress.region || "",
-        zip: order.shippingAddress.zip,
-        country_code: order.shippingAddress.country,
-      },
+      address_to: normalizePrintifyAddress(order.shippingAddress),
     }
   }
 
