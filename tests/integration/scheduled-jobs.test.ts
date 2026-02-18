@@ -305,6 +305,45 @@ describe("Integration: auto-submit-orders job", () => {
     expect(activity.order_auto_submit.orders_dead_lettered).toBe(1)
   })
 
+  it("respects custom max_order_retries from configuration", async () => {
+    ctx.stores.configurations.create([
+      { id: "config_auto", store_id: "s1", auto_submit_orders: true, max_order_retries: 5, printify_api_key: "k", printify_shop_id: "sh" },
+    ])
+
+    // retry_count=4: would dead-letter at default (3), but config allows 5
+    ctx.stores.orders.create([
+      { id: "ord_custom", medusa_order_id: "med_custom", status: "pending", configuration_id: "config_auto", total_price: 2000, line_items: [], shipping_address: {}, retry_count: 4 },
+    ])
+
+    mockSubmitRun.mockRejectedValue(new Error("Transient error"))
+
+    await autoSubmitOrdersJob(buildContainer(ctx))
+
+    const order = ctx.stores.orders.retrieve("ord_custom")
+    expect(order.retry_count).toBe(5)
+    expect(order.status).toBe("failed") // 5 >= max_order_retries(5) → dead-lettered
+    expect(order.error_details).toBe("Transient error")
+  })
+
+  it("keeps order pending when retry_count below custom max_order_retries", async () => {
+    ctx.stores.configurations.create([
+      { id: "config_auto", store_id: "s1", auto_submit_orders: true, max_order_retries: 5, printify_api_key: "k", printify_shop_id: "sh" },
+    ])
+
+    // retry_count=3: would dead-letter at default (3), but config allows 5
+    ctx.stores.orders.create([
+      { id: "ord_still_ok", medusa_order_id: "med_still_ok", status: "pending", configuration_id: "config_auto", total_price: 2000, line_items: [], shipping_address: {}, retry_count: 3 },
+    ])
+
+    mockSubmitRun.mockRejectedValue(new Error("Transient error"))
+
+    await autoSubmitOrdersJob(buildContainer(ctx))
+
+    const order = ctx.stores.orders.retrieve("ord_still_ok")
+    expect(order.retry_count).toBe(4)
+    expect(order.status).toBe("pending") // 4 < 5, still retryable
+  })
+
   it("resets retry_count to 0 on successful submission", async () => {
     ctx.stores.configurations.create([
       { id: "config_auto", store_id: "s1", auto_submit_orders: true, printify_api_key: "k", printify_shop_id: "sh" },

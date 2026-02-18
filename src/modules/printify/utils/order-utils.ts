@@ -8,6 +8,9 @@
 /** Default Printify shipping method ID used when none is specified. */
 export const DEFAULT_SHIPPING_METHOD = 1
 
+/** Default maximum submission retries before an order is dead-lettered. */
+export const DEFAULT_MAX_ORDER_RETRIES = 3
+
 /**
  * Normalizes a shipping address that may use camelCase (Medusa)
  * or snake_case (Printify/stored) field names into the shape

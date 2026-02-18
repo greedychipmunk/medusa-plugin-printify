@@ -91,13 +91,13 @@ describe("auto-submit-orders retry & dead-letter", () => {
     ])
   })
 
-  // 3. Moves order to FAILED after MAX_RETRIES (3) exceeded
-  it("should move order to FAILED after MAX_RETRIES exceeded", async () => {
+  // 3. Moves order to FAILED after max_order_retries exceeded
+  it("should move order to FAILED after max_order_retries exceeded", async () => {
     mockWorkflowRun.mockRejectedValueOnce(new Error("Permanent failure"))
 
     const container = buildContainer(
       [{ id: "config-1", auto_submit_orders: true, store_id: "store-1" }],
-      [buildOrder("order-1", "config-1", 2)], // retry_count=2, next will be 3 >= MAX_RETRIES
+      [buildOrder("order-1", "config-1", 2)], // retry_count=2, next will be 3 >= default max_order_retries
     )
 
     await autoSubmitOrdersJob(container)
@@ -156,7 +156,7 @@ describe("auto-submit-orders retry & dead-letter", () => {
 
     const container = buildContainer(
       [{ id: "config-1", auto_submit_orders: true, store_id: "store-1" }],
-      [buildOrder("order-1", "config-1", 2)], // will exceed MAX_RETRIES
+      [buildOrder("order-1", "config-1", 2)], // will exceed default max_order_retries
     )
 
     await autoSubmitOrdersJob(container)

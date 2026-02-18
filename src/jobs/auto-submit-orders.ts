@@ -4,8 +4,7 @@ import type PrintifyModuleService from "../modules/printify/service"
 import { PrintifyOrderStatus } from "../modules/printify/models/printify-order"
 import { automationActivityStore } from "../modules/printify/utils/automation-activity"
 import { submitPrintifyOrderWorkflow } from "../workflows/submit-printify-order"
-
-const MAX_RETRIES = 3
+import { DEFAULT_MAX_ORDER_RETRIES } from "../modules/printify/utils/order-utils"
 
 export default async function autoSubmitOrdersJob(container: MedusaContainer) {
   const logger = container.resolve("logger") as any
@@ -48,6 +47,7 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
             (o.entity?.configuration_id || o.configuration_id) === "default"
         )
 
+        const maxRetries = config.max_order_retries ?? DEFAULT_MAX_ORDER_RETRIES
         let submitted = 0
         let failed = 0
         let deadLettered = 0
@@ -77,7 +77,7 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
             const errorMessage = (error as Error).message
             const currentRetryCount = ((order as any).entity?.retry_count ?? (order as any).retry_count ?? 0) + 1
 
-            if (currentRetryCount >= MAX_RETRIES) {
+            if (currentRetryCount >= maxRetries) {
               // Dead-letter: move to FAILED status
               await printifyService.updatePrintifyOrders([{
                 id: order.id,
@@ -90,6 +90,7 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
               logger.warn("Order dead-lettered after max retries", {
                 orderId: order.id,
                 retryCount: currentRetryCount,
+                maxRetries,
                 error: errorMessage,
               })
             } else {
@@ -103,7 +104,7 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
               logger.warn("Failed to auto-submit order, will retry", {
                 orderId: order.id,
                 retryCount: currentRetryCount,
-                maxRetries: MAX_RETRIES,
+                maxRetries,
                 error: errorMessage,
               })
             }
