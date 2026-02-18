@@ -131,6 +131,12 @@ export async function PATCH(req: AuthenticatedMedusaRequest, res: MedusaResponse
     })
   } catch (error) {
     apiLogger.error("Failed to update order", error as Error)
+
+    if ((error as any)?.code === "VALIDATION_ERROR") {
+      res.status(400).json({ success: false, error: "Invalid status transition", message: (error as Error).message })
+      return
+    }
+
     res.status(500).json({ success: false, error: "Internal server error", message: "Failed to update order" })
   }
 }

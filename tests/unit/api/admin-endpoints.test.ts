@@ -279,6 +279,72 @@ describe('Admin API Endpoints', () => {
     })
   });
 
+  describe('PATCH /admin/printify/orders/:id - Status Transition Validation', () => {
+    const { PATCH: orderPATCH } = require('../../../src/api/admin/printify/orders/[id]/route')
+
+    function buildPatchReq(orderId: string, body: Record<string, any>): any {
+      return {
+        params: { id: orderId },
+        body,
+        scope: {
+          resolve: jest.fn(),
+        },
+      }
+    }
+
+    function buildRes(): any {
+      return {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      }
+    }
+
+    it('should return 400 for invalid status transition', async () => {
+      const mockService = {
+        updateOrderStatus: jest.fn().mockRejectedValue(
+          Object.assign(new Error('Invalid status transition: delivered → pending'), { code: 'VALIDATION_ERROR' })
+        ),
+        getOrderBridge: jest.fn(),
+      }
+
+      const req = buildPatchReq('order_1', { status: 'pending' })
+      req.scope.resolve = jest.fn().mockReturnValue(mockService)
+      const res = buildRes()
+
+      await orderPATCH(req, res)
+
+      expect(res.status).toHaveBeenCalledWith(400)
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: 'Invalid status transition',
+        })
+      )
+    })
+
+    it('should return 200 for valid status transition', async () => {
+      const mockService = {
+        updateOrderStatus: jest.fn().mockResolvedValue(undefined),
+        getOrderBridge: jest.fn().mockResolvedValue({
+          id: 'order_1',
+          medusaOrderId: 'medusa-1',
+          status: 'submitted',
+          updatedAt: new Date(),
+        }),
+      }
+
+      const req = buildPatchReq('order_1', { status: 'submitted' })
+      req.scope.resolve = jest.fn().mockReturnValue(mockService)
+      const res = buildRes()
+
+      await orderPATCH(req, res)
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true })
+      )
+    })
+  });
+
   describe('Error Handling', () => {
     it('should handle database connection errors', async () => {
       // This test will verify database error handling
