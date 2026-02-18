@@ -65,7 +65,7 @@ const submitToPrintifyStep = createStep(
             ]
           : undefined,
       })),
-      shipping_method: input.shipping_method || 1,
+      shipping_method: input.shipping_method || order.shippingMethod || 1,
       send_shipping_notification: true,
       address_to: {
         first_name: order.shippingAddress.firstName || order.shippingAddress.first_name,

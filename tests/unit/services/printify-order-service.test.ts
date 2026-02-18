@@ -98,6 +98,10 @@ describe('PrintifyOrderService (via PrintifyModuleService)', () => {
       });
     });
 
+    service.listPrintifyConfigurations = jest.fn().mockResolvedValue([
+      { id: "config_1", store_id: "store_1" },
+    ]);
+
     service.listAndCountPrintifyOrders = jest.fn().mockResolvedValue([[], 0]);
 
     service.listPrintifyOrders = jest.fn().mockImplementation(async (opts: any) => {

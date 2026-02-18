@@ -86,6 +86,7 @@ export interface SyncProductsResult {
 
 export interface CreateOrderRequest {
   medusaOrderId: string
+  configurationId?: string
   customerId?: string
   customerEmail: string
   cartItems: PrintifyCartItem[]
@@ -586,11 +587,18 @@ class PrintifyModuleService extends MedusaService({
     const discountAmount = request.discountAmount || 0
     const totalPrice = subtotal + shippingCost + taxAmount - discountAmount
 
+    // Resolve configuration_id: use explicit value, or fall back to first available config
+    let configurationId = request.configurationId
+    if (!configurationId) {
+      const [firstConfig] = await this.listPrintifyConfigurations({})
+      configurationId = firstConfig?.id || "default"
+    }
+
     // Persist order in database
     const results = await this.createPrintifyOrders([
       {
         medusa_order_id: request.medusaOrderId,
-        configuration_id: "default",
+        configuration_id: configurationId,
         status: PrintifyOrderStatus.PENDING,
         line_items: request.cartItems as any,
         shipping_address: request.shippingAddress,

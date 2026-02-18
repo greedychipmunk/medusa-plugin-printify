@@ -410,6 +410,65 @@ describe("Integration: Order Lifecycle", () => {
     expect(stats.currency).toBe("USD")
   })
 
+  it("resolves configuration_id from first available config when not provided", async () => {
+    const order = await ctx.service.createOrderFromCart({
+      medusaOrderId: "medusa_cfg_auto",
+      customerEmail: "jane@example.com",
+      cartItems: buildCartItems(),
+      shippingAddress: SHIPPING_ADDRESS,
+    })
+
+    // Should have resolved to "config_1" (seeded in beforeEach), not "default"
+    const stored = ctx.stores.orders.retrieve(order.id)
+    expect(stored.configuration_id).toBe("config_1")
+  })
+
+  it("uses explicit configurationId when provided", async () => {
+    // Seed a second configuration
+    ctx.stores.configurations.create([
+      {
+        id: "config_2",
+        store_id: "store_2",
+        printify_api_key: "key-2",
+        printify_shop_id: "67890",
+      },
+    ])
+
+    const order = await ctx.service.createOrderFromCart({
+      medusaOrderId: "medusa_cfg_explicit",
+      customerEmail: "jane@example.com",
+      configurationId: "config_2",
+      cartItems: buildCartItems(),
+      shippingAddress: SHIPPING_ADDRESS,
+    })
+
+    const stored = ctx.stores.orders.retrieve(order.id)
+    expect(stored.configuration_id).toBe("config_2")
+  })
+
+  it("persists shipping_method on order entity and uses it during submit", async () => {
+    mockAxios.post.mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
+
+    const created = await ctx.service.createOrderFromCart({
+      medusaOrderId: "medusa_ship_persist",
+      customerEmail: "jane@example.com",
+      cartItems: buildCartItems(),
+      shippingAddress: SHIPPING_ADDRESS,
+      shippingMethod: 3,
+    })
+
+    // Verify persisted in store
+    const stored = ctx.stores.orders.retrieve(created.id)
+    expect(stored.shipping_method).toBe(3)
+
+    // Verify it flows through to API payload on submit
+    const apiClient = buildApiClient(mockAxios)
+    await ctx.service.submitPrintifyOrder(created.id, apiClient)
+
+    const payload = mockAxios.post.mock.calls[0][1]
+    expect(payload.shipping_method).toBe(3)
+  })
+
   it("listOrdersFiltered exposes retry_count, error_details, last_error_at on bridges", async () => {
     const errorDate = new Date("2026-02-01T12:00:00Z")
     ctx.stores.orders.create([
