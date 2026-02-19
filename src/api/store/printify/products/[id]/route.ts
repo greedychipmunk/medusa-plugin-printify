@@ -3,6 +3,7 @@ import type PrintifyModuleService from "../../../../../modules/printify/service"
 import { PRINTIFY_MODULE } from "../../../../../modules/printify"
 import { logger } from "../../../../../modules/printify/utils/logger"
 import { ErrorCode } from "../../../../../modules/printify/utils/error-handling"
+import { parseVariantsFromPrintifyData } from "../../../../../modules/printify/utils/parse-variants"
 
 const apiLogger = logger.child("StoreProductDetailAPI")
 
@@ -54,6 +55,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
       // Non-fatal: linked data may not be available
     }
 
+    // Parse variant data from synced printify_data
+    const variants = parseVariantsFromPrintifyData((product as any).printify_data)
+
     res.json({
       data: {
         id: product.id,
@@ -65,6 +69,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
         medusa_thumbnail: medusaProductThumbnail,
         preview_image_url: getPreviewImageUrl((product as any).images),
         images: Array.isArray((product as any).images) ? (product as any).images : [],
+        variants,
         created_at: product.created_at,
         updated_at: product.updated_at,
         breadcrumbs: [
