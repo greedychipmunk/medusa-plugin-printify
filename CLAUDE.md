@@ -71,7 +71,7 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Admin Retry Endpoint**: `POST /admin/printify/orders/:id/retry` resets FAILED orders back to PENDING
 - **Visibility**: Order list/detail responses now expose retry_count, error_details, last_error_at
 - **Activity Tracking**: `orders_dead_lettered` counter in automation activity store
-- **Test Coverage**: 257/257 tests across 26 suites (200 unit + 52 integration tests)
+- **Test Coverage**: 481/481 tests across 47 suites
 
 ## Key Components
 
@@ -118,7 +118,7 @@ src/admin/widgets/
 - **TypeScript 5.x** with strict typing enabled
 - **MedusaJS v2.11+** modern import patterns using `@medusajs/framework`
 - **DML entities** for all data models with bridge compatibility
-- **Comprehensive testing** - maintain 100% critical path coverage (257 tests)
+- **Comprehensive testing** - maintain 100% critical path coverage (481 tests)
 - **Error handling** with retry logic and user-friendly messages
 
 ### Import Patterns (CRITICAL)
@@ -168,7 +168,7 @@ export class PrintifyOrderService {
 ## Testing Requirements
 
 ### Test Coverage
-- **257 tests total** across 26 test suites (200 unit + 52 integration)
+- **481 tests total** across 47 test suites
 - **100% success rate** required for any changes
 - **Critical path coverage** for all user-facing functionality
 - **DML model validation** with both entity and bridge patterns
@@ -185,7 +185,8 @@ tests/
 │   ├── product-sync-lifecycle.test.ts           # 10 product sync tests
 │   ├── webhook-handling.test.ts                 # 9 webhook integration tests
 │   ├── shipping-rates.test.ts                   # 6 shipping/cache tests
-│   └── scheduled-jobs.test.ts                   # 14 sync job + auto-submit job tests
+│   ├── scheduled-jobs.test.ts                   # 14 sync job + auto-submit job tests
+│   └── bulk-order-lifecycle.test.ts             # 7 bulk order lifecycle tests
 ├── unit/
 │   ├── api/
 │   │   ├── admin-endpoints.test.ts              # 28 API tests
@@ -194,7 +195,8 @@ tests/
 │   │   ├── webhook-endpoints.test.ts             # 16 webhook handler tests
 │   │   ├── webhook-admin-endpoints.test.ts      # 5 admin webhook tests
 │   │   ├── automation-endpoints.test.ts         # 6 automation API tests
-│   └── order-retry-endpoint.test.ts         # 4 retry endpoint tests
+│   ├── order-retry-endpoint.test.ts         # 4 retry endpoint tests
+│   └── bulk-order-endpoints.test.ts         # 15 bulk order endpoint tests
 │   ├── models/
 │   │   ├── printify-configuration-dml.test.ts   # 13 model tests
 │   │   └── printify-product-dml.test.ts         # 14 model tests
@@ -203,7 +205,8 @@ tests/
 │   │   ├── printify-link-service.test.ts            # 14 link/module tests
 │   │   ├── printify-order-service.test.ts           # 19 service tests
 │   │   ├── printify-api-client-webhooks.test.ts     # 5 API client webhook tests
-│   │   └── printify-api-client-shipping.test.ts     # 4 API client shipping tests
+│   │   ├── printify-api-client-shipping.test.ts     # 4 API client shipping tests
+│   │   └── bulk-order-service.test.ts               # 9 bulk order service tests
 │   ├── jobs/
 │   │   ├── sync-products-job.test.ts                # 5 sync job tests
 │   │   ├── auto-submit-orders-job.test.ts           # 5 auto-submit job tests
@@ -333,6 +336,9 @@ POST   /admin/printify/orders/:id/cancel    # Cancel order
 POST   /admin/printify/orders/:id/retry     # Retry failed order (resets to PENDING)
 POST   /admin/printify/orders/:id/sync      # Sync status from Printify
 GET    /admin/printify/orders/stats     # Order statistics
+POST   /admin/printify/orders/bulk-submit  # Bulk submit orders (max 100)
+POST   /admin/printify/orders/bulk-cancel  # Bulk cancel orders (max 100)
+POST   /admin/printify/orders/bulk-retry   # Bulk retry failed orders (max 100)
 ```
 
 ### Storefront Endpoints (Public)
@@ -385,7 +391,7 @@ Both jobs respect their config flags, skip when already running, and track activ
 # Development
 npm run build            # Compile TypeScript
 npm run watch           # Development with watch mode
-npm test               # Run test suite (257 tests)
+npm test               # Run test suite (481 tests)
 npm run lint           # ESLint validation
 npm run lint:fix       # Auto-fix linting issues
 
@@ -424,7 +430,7 @@ PRINTIFY_LOG_LEVEL=debug npm run dev
 When working with this plugin:
 
 1. **Always maintain modern import patterns** - use `@medusajs/framework` imports
-2. **Preserve test coverage** - all 257 tests must continue passing
+2. **Preserve test coverage** - all 481 tests must continue passing
 3. **Use DML entities** with bridge compatibility for any model changes
 4. **Follow TypeScript strict typing** - no `any` types in production code
 5. **Implement proper error handling** with retry logic for external APIs

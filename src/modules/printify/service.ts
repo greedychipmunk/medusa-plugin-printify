@@ -223,6 +223,12 @@ export interface AnalyticsResult {
   top_products: TopProduct[]
 }
 
+export interface BulkOrderOperationResult {
+  success_count: number
+  failure_count: number
+  failed_orders: Array<{ order_id: string; error: string }>
+}
+
 export type WebhookEventDispatchFn = (
   service: PrintifyModuleService,
   event: any,
@@ -1134,6 +1140,103 @@ class PrintifyModuleService extends MedusaService({
       default:
         return PrintifyOrderStatus.PROCESSING
     }
+  }
+
+  // ── Bulk Order Operations ──────────────────────────────────────
+
+  async bulkSubmitOrders(
+    orderIds: string[],
+    apiClient: PrintifyApiClient,
+  ): Promise<BulkOrderOperationResult> {
+    const result: BulkOrderOperationResult = {
+      success_count: 0,
+      failure_count: 0,
+      failed_orders: [],
+    }
+
+    for (const orderId of orderIds) {
+      try {
+        await this.submitPrintifyOrder(orderId, apiClient)
+        result.success_count++
+      } catch (error) {
+        result.failure_count++
+        result.failed_orders.push({
+          order_id: orderId,
+          error: (error as Error).message,
+        })
+      }
+    }
+
+    return result
+  }
+
+  async bulkCancelOrders(
+    orderIds: string[],
+    apiClient: PrintifyApiClient,
+    reason?: string,
+  ): Promise<BulkOrderOperationResult> {
+    const result: BulkOrderOperationResult = {
+      success_count: 0,
+      failure_count: 0,
+      failed_orders: [],
+    }
+
+    for (const orderId of orderIds) {
+      try {
+        await this.cancelPrintifyOrder(orderId, apiClient, reason)
+        result.success_count++
+      } catch (error) {
+        result.failure_count++
+        result.failed_orders.push({
+          order_id: orderId,
+          error: (error as Error).message,
+        })
+      }
+    }
+
+    return result
+  }
+
+  async bulkRetryOrders(
+    orderIds: string[],
+  ): Promise<BulkOrderOperationResult> {
+    const result: BulkOrderOperationResult = {
+      success_count: 0,
+      failure_count: 0,
+      failed_orders: [],
+    }
+
+    for (const orderId of orderIds) {
+      try {
+        const order = await this.getOrderBridge(orderId)
+
+        if (order.status !== PrintifyOrderStatus.FAILED) {
+          result.failure_count++
+          result.failed_orders.push({
+            order_id: orderId,
+            error: `Order is not in FAILED status (current: ${order.status})`,
+          })
+          continue
+        }
+
+        await this.updatePrintifyOrders([{
+          id: orderId,
+          status: PrintifyOrderStatus.PENDING,
+          retry_count: 0,
+          error_details: null,
+          last_error_at: null,
+        }])
+        result.success_count++
+      } catch (error) {
+        result.failure_count++
+        result.failed_orders.push({
+          order_id: orderId,
+          error: (error as Error).message,
+        })
+      }
+    }
+
+    return result
   }
 
   // ── Cart Business Logic (in-memory, session-scoped) ─────────────
