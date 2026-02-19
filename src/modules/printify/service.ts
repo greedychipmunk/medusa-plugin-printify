@@ -20,7 +20,7 @@ import { PrintifyApiClient, PrintifyProduct as ApiProduct } from "./services/pri
 import { PrintifyOrderBridge } from "./utils/dml-bridge"
 import { logger } from "./utils/logger"
 import { PrintifyPluginError, ErrorCode, ErrorSeverity, ErrorFactory } from "./utils/error-handling"
-import { DEFAULT_SHIPPING_METHOD, DEFAULT_MAX_ORDER_RETRIES, normalizePrintifyAddress, canTransitionTo } from "./utils/order-utils"
+import { DEFAULT_SHIPPING_METHOD, DEFAULT_MAX_ORDER_RETRIES, normalizePrintifyAddress, canTransitionTo, validateShippingMethod } from "./utils/order-utils"
 
 // ── Interfaces ──────────────────────────────────────────────────────
 
@@ -665,6 +665,9 @@ class PrintifyModuleService extends MedusaService({
         { status: order.status },
       )
     }
+
+    // Validate shipping method before submission
+    await validateShippingMethod(apiClient, order)
 
     const printifyOrderData = this.preparePrintifyOrderData(order)
     const response = await apiClient.createOrder(printifyOrderData)

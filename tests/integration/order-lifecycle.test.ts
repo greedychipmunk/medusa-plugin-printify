@@ -44,9 +44,11 @@ import {
   PRINTIFY_ORDER_IN_PRODUCTION,
   PRINTIFY_ORDER_SHIPPED,
   PRINTIFY_ORDER_DELIVERED,
+  PRINTIFY_SHIPPING_RATES,
 } from "./helpers/mock-printify-api"
 import { PrintifyApiClient } from "../../src/modules/printify/services/printify-api-client"
 import { PrintifyCartItem } from "../../src/modules/printify/models/printify-cart-item"
+import { shippingRateCache } from "../../src/modules/printify/utils/shipping-cache"
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -91,6 +93,7 @@ describe("Integration: Order Lifecycle", () => {
   beforeEach(() => {
     ctx = createTestService()
     mockAxios = setupAxiosMock()
+    shippingRateCache.clear()
 
     // Seed a configuration
     ctx.stores.configurations.create([
@@ -131,7 +134,9 @@ describe("Integration: Order Lifecycle", () => {
   })
 
   it("submits order with correct Printify API payload", async () => {
-    mockAxios.post.mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
+    mockAxios.post
+      .mockResolvedValueOnce({ data: PRINTIFY_SHIPPING_RATES }) // shipping validation
+      .mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
 
     const created = await ctx.service.createOrderFromCart({
       medusaOrderId: "medusa_order_2",
@@ -143,7 +148,7 @@ describe("Integration: Order Lifecycle", () => {
     const apiClient = buildApiClient(mockAxios)
     await ctx.service.submitPrintifyOrder(created.id, apiClient)
 
-    const postCall = mockAxios.post.mock.calls[0]
+    const postCall = mockAxios.post.mock.calls[1] // [0] is shipping, [1] is order
     const payload = postCall[1]
 
     expect(payload.external_id).toBe("medusa_order_2")
@@ -158,7 +163,9 @@ describe("Integration: Order Lifecycle", () => {
   })
 
   it("transitions order status to SUBMITTED after submit", async () => {
-    mockAxios.post.mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
+    mockAxios.post
+      .mockResolvedValueOnce({ data: PRINTIFY_SHIPPING_RATES })
+      .mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
 
     const created = await ctx.service.createOrderFromCart({
       medusaOrderId: "medusa_order_3",
@@ -181,7 +188,9 @@ describe("Integration: Order Lifecycle", () => {
   })
 
   it("submits with custom shipping_method", async () => {
-    mockAxios.post.mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
+    mockAxios.post
+      .mockResolvedValueOnce({ data: PRINTIFY_SHIPPING_RATES })
+      .mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
 
     const created = await ctx.service.createOrderFromCart({
       medusaOrderId: "medusa_order_4",
@@ -194,12 +203,14 @@ describe("Integration: Order Lifecycle", () => {
     const apiClient = buildApiClient(mockAxios)
     await ctx.service.submitPrintifyOrder(created.id, apiClient)
 
-    const payload = mockAxios.post.mock.calls[0][1]
+    const payload = mockAxios.post.mock.calls[1][1] // [0] is shipping
     expect(payload.shipping_method).toBe(2)
   })
 
   it("throws on invalid API response and keeps order PENDING", async () => {
-    mockAxios.post.mockResolvedValueOnce({ data: {} }) // missing id
+    mockAxios.post
+      .mockResolvedValueOnce({ data: PRINTIFY_SHIPPING_RATES }) // shipping validation
+      .mockResolvedValueOnce({ data: {} }) // missing id
 
     const created = await ctx.service.createOrderFromCart({
       medusaOrderId: "medusa_order_5",
@@ -219,7 +230,9 @@ describe("Integration: Order Lifecycle", () => {
   })
 
   it("cancels a submitted order", async () => {
-    mockAxios.post.mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
+    mockAxios.post
+      .mockResolvedValueOnce({ data: PRINTIFY_SHIPPING_RATES })
+      .mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
     mockAxios.delete.mockResolvedValueOnce({})
 
     const created = await ctx.service.createOrderFromCart({
@@ -238,7 +251,9 @@ describe("Integration: Order Lifecycle", () => {
   })
 
   it("syncs order status from Printify (in-production -> PROCESSING)", async () => {
-    mockAxios.post.mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
+    mockAxios.post
+      .mockResolvedValueOnce({ data: PRINTIFY_SHIPPING_RATES })
+      .mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
     mockAxios.get.mockResolvedValueOnce({ data: PRINTIFY_ORDER_IN_PRODUCTION })
 
     const created = await ctx.service.createOrderFromCart({
@@ -266,7 +281,9 @@ describe("Integration: Order Lifecycle", () => {
     expect(created.status).toBe("pending")
 
     // Step 2: Submit
-    mockAxios.post.mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
+    mockAxios.post
+      .mockResolvedValueOnce({ data: PRINTIFY_SHIPPING_RATES })
+      .mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
     const apiClient = buildApiClient(mockAxios)
     const submitted = await ctx.service.submitPrintifyOrder(created.id, apiClient)
     expect(submitted.status).toBe("submitted")
@@ -350,7 +367,9 @@ describe("Integration: Order Lifecycle", () => {
   })
 
   it("admin retry resets FAILED order back to PENDING", async () => {
-    mockAxios.post.mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
+    mockAxios.post
+      .mockResolvedValueOnce({ data: PRINTIFY_SHIPPING_RATES })
+      .mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
 
     ctx.stores.orders.create([
       {
@@ -447,7 +466,9 @@ describe("Integration: Order Lifecycle", () => {
   })
 
   it("persists shipping_method on order entity and uses it during submit", async () => {
-    mockAxios.post.mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
+    mockAxios.post
+      .mockResolvedValueOnce({ data: PRINTIFY_SHIPPING_RATES }) // shipping validation
+      .mockResolvedValueOnce({ data: PRINTIFY_ORDER_RESPONSE })
 
     const created = await ctx.service.createOrderFromCart({
       medusaOrderId: "medusa_ship_persist",
@@ -465,7 +486,7 @@ describe("Integration: Order Lifecycle", () => {
     const apiClient = buildApiClient(mockAxios)
     await ctx.service.submitPrintifyOrder(created.id, apiClient)
 
-    const payload = mockAxios.post.mock.calls[0][1]
+    const payload = mockAxios.post.mock.calls[1][1] // [0] is shipping
     expect(payload.shipping_method).toBe(3)
   })
 

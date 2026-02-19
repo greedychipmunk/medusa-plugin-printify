@@ -51,7 +51,7 @@ describe("Integration: Shipping Rates", () => {
     // Fetch from API
     const rates = await client.calculateShipping({ line_items: LINE_ITEMS, address_to: ADDRESS })
 
-    expect(rates).toHaveLength(2)
+    expect(rates).toHaveLength(3)
     expect(rates[0].name).toBe("Standard Shipping")
     expect(rates[1].name).toBe("Express Shipping")
     expect(mockAxios.post).toHaveBeenCalledTimes(1)
@@ -66,7 +66,7 @@ describe("Integration: Shipping Rates", () => {
     const client = new PrintifyApiClient({ apiKey: "test-key", shopId: "12345" })
     const rates = await client.calculateShipping({ line_items: LINE_ITEMS, address_to: ADDRESS })
 
-    expect(rates).toHaveLength(2)
+    expect(rates).toHaveLength(3)
     expect(rates[0].id).toBe(1)
   })
 
@@ -76,7 +76,7 @@ describe("Integration: Shipping Rates", () => {
     const client = new PrintifyApiClient({ apiKey: "test-key", shopId: "12345" })
     const rates = await client.calculateShipping({ line_items: LINE_ITEMS, address_to: ADDRESS })
 
-    expect(rates).toHaveLength(2)
+    expect(rates).toHaveLength(3)
     expect(rates[1].cost).toBe(999)
   })
 
@@ -96,7 +96,7 @@ describe("Integration: Shipping Rates", () => {
 
     const cached = cache.get(LINE_ITEMS, ADDRESS)
     expect(cached).not.toBeNull()
-    expect(cached).toHaveLength(2)
+    expect(cached).toHaveLength(3)
     expect(cached![0].name).toBe("Standard Shipping")
 
     // API should not be called

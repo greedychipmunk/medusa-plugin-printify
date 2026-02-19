@@ -129,6 +129,7 @@ export const PRINTIFY_ORDER_DELIVERED = {
 export const PRINTIFY_SHIPPING_RATES = [
   { id: 1, name: "Standard Shipping", cost: 499, currency: "USD", estimated_delivery_min: 5, estimated_delivery_max: 10 },
   { id: 2, name: "Express Shipping", cost: 999, currency: "USD", estimated_delivery_min: 2, estimated_delivery_max: 4 },
+  { id: 3, name: "Priority Shipping", cost: 1499, currency: "USD", estimated_delivery_min: 1, estimated_delivery_max: 2 },
 ]
 
 export const PRINTIFY_PRODUCT_UPDATED = {

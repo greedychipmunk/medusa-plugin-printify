@@ -2,6 +2,7 @@ import PrintifyModuleService from '../../../src/modules/printify/service';
 import { PrintifyOrderStatus } from '../../../src/modules/printify/models/printify-order';
 import { PrintifyCartItem } from '../../../src/modules/printify/models/printify-cart-item';
 import { PrintifyPluginError } from '../../../src/modules/printify/utils/error-handling';
+import { shippingRateCache } from '../../../src/modules/printify/utils/shipping-cache';
 import type { CreateOrderRequest } from '../../../src/modules/printify/service';
 
 // Mock the MedusaService factory so we can instantiate without a real DB
@@ -120,7 +121,12 @@ describe('PrintifyOrderService (via PrintifyModuleService)', () => {
       createOrder: jest.fn(),
       getOrder: jest.fn(),
       cancelOrder: jest.fn(),
+      calculateShipping: jest.fn().mockResolvedValue([
+        { id: 1, name: 'Standard', cost: 500 },
+      ]),
     };
+
+    shippingRateCache.clear();
   });
 
   afterEach(() => {
@@ -540,6 +546,75 @@ describe('PrintifyOrderService (via PrintifyModuleService)', () => {
 
       expect(result).toBeDefined();
       expect(result.id).toBe(order.id);
+    });
+  });
+
+  describe('shipping method validation on submit', () => {
+    it('should reject submission with invalid shipping method', async () => {
+      const cartItems = [createMockCartItem()];
+      const order = await service.createOrderFromCart({
+        medusaOrderId: 'medusa-order-1',
+        customerEmail: 'john.doe@example.com',
+        cartItems,
+        shippingAddress: mockShippingAddress,
+        shippingMethod: 99,
+      });
+
+      mockApiClient.calculateShipping = jest.fn().mockResolvedValue([
+        { id: 1, name: 'Standard', cost: 500 },
+        { id: 2, name: 'Express', cost: 1200 },
+      ]);
+
+      await expect(service.submitPrintifyOrder(order.id, mockApiClient))
+        .rejects.toThrow(/Shipping method 99 is not available/);
+
+      expect(mockApiClient.createOrder).not.toHaveBeenCalled();
+    });
+
+    it('should allow submission with valid shipping method', async () => {
+      const cartItems = [createMockCartItem()];
+      const order = await service.createOrderFromCart({
+        medusaOrderId: 'medusa-order-1',
+        customerEmail: 'john.doe@example.com',
+        cartItems,
+        shippingAddress: mockShippingAddress,
+        shippingMethod: 2,
+      });
+
+      mockApiClient.calculateShipping = jest.fn().mockResolvedValue([
+        { id: 1, name: 'Standard', cost: 500 },
+        { id: 2, name: 'Express', cost: 1200 },
+      ]);
+
+      mockApiClient.createOrder.mockResolvedValue({
+        id: 'printify-order-123',
+        status: 'pending',
+      });
+
+      const submitted = await service.submitPrintifyOrder(order.id, mockApiClient);
+
+      expect(submitted.status).toBe(PrintifyOrderStatus.SUBMITTED);
+      expect(mockApiClient.calculateShipping).toHaveBeenCalledTimes(1);
+      expect(mockApiClient.createOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it('should propagate shipping API errors during validation', async () => {
+      const cartItems = [createMockCartItem()];
+      const order = await service.createOrderFromCart({
+        medusaOrderId: 'medusa-order-1',
+        customerEmail: 'john.doe@example.com',
+        cartItems,
+        shippingAddress: mockShippingAddress,
+      });
+
+      mockApiClient.calculateShipping = jest.fn().mockRejectedValue(
+        new Error('Printify shipping API down'),
+      );
+
+      await expect(service.submitPrintifyOrder(order.id, mockApiClient))
+        .rejects.toThrow('Printify shipping API down');
+
+      expect(mockApiClient.createOrder).not.toHaveBeenCalled();
     });
   });
 

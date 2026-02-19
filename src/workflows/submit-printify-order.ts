@@ -7,7 +7,7 @@ import {
 import { PRINTIFY_MODULE } from "../modules/printify"
 import type PrintifyModuleService from "../modules/printify/service"
 import { PrintifyOrderStatus } from "../modules/printify/models/printify-order"
-import { DEFAULT_SHIPPING_METHOD, normalizePrintifyAddress } from "../modules/printify/utils/order-utils"
+import { DEFAULT_SHIPPING_METHOD, normalizePrintifyAddress, validateShippingMethod } from "../modules/printify/utils/order-utils"
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -30,6 +30,10 @@ const validateOrderStep = createStep(
         `Order ${input.order_id} cannot be submitted in state "${order.status}"`,
       )
     }
+
+    // Validate shipping method against Printify API
+    const apiClient = await printifyService.getApiClientForStore(input.store_id)
+    await validateShippingMethod(apiClient, order, input.shipping_method)
 
     return new StepResponse({
       order_id: input.order_id,
