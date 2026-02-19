@@ -12,6 +12,7 @@ import {
   DataTableFilteringState,
   DataTableSortingState,
   useDataTable,
+  CommandBar,
   Text,
 } from "@medusajs/ui"
 import { useNavigate } from "react-router-dom"
@@ -52,6 +53,7 @@ const STATUS_COLORS: Record<string, "green" | "orange" | "blue" | "red" | "grey"
 
 const SUBMITTABLE_STATUSES = ["pending", "validated"]
 const CANCELLABLE_STATUSES = ["pending", "validated", "submitted", "processing"]
+const RETRYABLE_STATUSES = ["failed"]
 
 const columnHelper = createDataTableColumnHelper<PrintifyOrder>()
 
@@ -78,6 +80,7 @@ const PrintifyOrdersPage = () => {
   const [orders, setOrders] = useState<PrintifyOrder[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
   const [pagination, setPagination] = useState<DataTablePaginationState>({
     pageSize: 20,
     pageIndex: 0,
@@ -95,6 +98,16 @@ const PrintifyOrdersPage = () => {
   useEffect(() => {
     loadOrders()
   }, [pagination.pageIndex, searchTerm, statusFilter])
+
+  // Compute which bulk actions are available based on selected orders' statuses
+  const bulkActions = useMemo(() => {
+    const selectedOrdersList = orders.filter((o) => selectedOrders.has(o.id))
+    return {
+      canSubmit: selectedOrdersList.some((o) => SUBMITTABLE_STATUSES.includes(o.status)),
+      canCancel: selectedOrdersList.some((o) => CANCELLABLE_STATUSES.includes(o.status)),
+      canRetry: selectedOrdersList.some((o) => RETRYABLE_STATUSES.includes(o.status)),
+    }
+  }, [selectedOrders, orders])
 
   const loadOrders = async () => {
     try {
@@ -188,6 +201,90 @@ const PrintifyOrdersPage = () => {
     } catch (error) {
       console.error("Failed to sync order status:", error)
       toast.error("Sync Failed", { description: "Failed to sync order status" })
+    }
+  }
+
+  const bulkSubmitOrders = async () => {
+    if (selectedOrders.size === 0) return
+
+    try {
+      const response = await fetch("/admin/printify/orders/bulk-submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_ids: Array.from(selectedOrders) }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        toast.success("Bulk Submit Completed", {
+          description: `${data.data.success_count} submitted, ${data.data.failure_count} failed`,
+        })
+        setSelectedOrders(new Set())
+        loadOrders()
+      } else {
+        toast.error("Bulk Submit Failed", {
+          description: data.message || "Failed to submit orders",
+        })
+      }
+    } catch (error) {
+      console.error("Failed to bulk submit orders:", error)
+      toast.error("Bulk Submit Failed", { description: "Failed to submit orders" })
+    }
+  }
+
+  const bulkCancelOrders = async () => {
+    if (selectedOrders.size === 0) return
+
+    try {
+      const response = await fetch("/admin/printify/orders/bulk-cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_ids: Array.from(selectedOrders),
+          reason: "Bulk cancel from admin panel",
+        }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        toast.success("Bulk Cancel Completed", {
+          description: `${data.data.success_count} cancelled, ${data.data.failure_count} failed`,
+        })
+        setSelectedOrders(new Set())
+        loadOrders()
+      } else {
+        toast.error("Bulk Cancel Failed", {
+          description: data.message || "Failed to cancel orders",
+        })
+      }
+    } catch (error) {
+      console.error("Failed to bulk cancel orders:", error)
+      toast.error("Bulk Cancel Failed", { description: "Failed to cancel orders" })
+    }
+  }
+
+  const bulkRetryOrders = async () => {
+    if (selectedOrders.size === 0) return
+
+    try {
+      const response = await fetch("/admin/printify/orders/bulk-retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_ids: Array.from(selectedOrders) }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        toast.success("Bulk Retry Completed", {
+          description: `${data.data.success_count} retried, ${data.data.failure_count} failed`,
+        })
+        setSelectedOrders(new Set())
+        loadOrders()
+      } else {
+        toast.error("Bulk Retry Failed", {
+          description: data.message || "Failed to retry orders",
+        })
+      }
+    } catch (error) {
+      console.error("Failed to bulk retry orders:", error)
+      toast.error("Bulk Retry Failed", { description: "Failed to retry orders" })
     }
   }
 
@@ -303,6 +400,25 @@ const PrintifyOrdersPage = () => {
       state: sorting,
       onSortingChange: setSorting,
     },
+    rowSelection: {
+      state: Object.fromEntries(
+        Array.from(selectedOrders).map((id) => [id, true])
+      ),
+      onRowSelectionChange: (updater: any) => {
+        const newSelection =
+          typeof updater === "function"
+            ? updater(
+                Object.fromEntries(
+                  Array.from(selectedOrders).map((id) => [id, true])
+                )
+              )
+            : updater
+
+        setSelectedOrders(
+          new Set(Object.keys(newSelection).filter((key) => newSelection[key]))
+        )
+      },
+    },
   })
 
   return (
@@ -326,6 +442,49 @@ const PrintifyOrdersPage = () => {
           </DataTable>
         </div>
       </Container>
+
+      {/* Command Bar for Bulk Actions */}
+      <CommandBar open={selectedOrders.size > 0}>
+        <CommandBar.Bar>
+          <CommandBar.Value>{selectedOrders.size} selected</CommandBar.Value>
+          <CommandBar.Seperator />
+          {bulkActions.canSubmit && (
+            <>
+              <CommandBar.Command
+                action={bulkSubmitOrders}
+                label="Submit Selected"
+                shortcut="s"
+              />
+              <CommandBar.Seperator />
+            </>
+          )}
+          {bulkActions.canCancel && (
+            <>
+              <CommandBar.Command
+                action={bulkCancelOrders}
+                label="Cancel Selected"
+                shortcut="x"
+              />
+              <CommandBar.Seperator />
+            </>
+          )}
+          {bulkActions.canRetry && (
+            <>
+              <CommandBar.Command
+                action={bulkRetryOrders}
+                label="Retry Selected"
+                shortcut="r"
+              />
+              <CommandBar.Seperator />
+            </>
+          )}
+          <CommandBar.Command
+            action={() => setSelectedOrders(new Set())}
+            label="Clear Selection"
+            shortcut="c"
+          />
+        </CommandBar.Bar>
+      </CommandBar>
 
       <Toaster />
     </>
