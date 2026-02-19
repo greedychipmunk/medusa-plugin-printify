@@ -38,26 +38,4 @@ module.exports = defineConfig({
       },
     },
   ],
-  plugins: [
-    {
-      resolve: "./src",
-      options: {
-        printify: {
-          apiKey: process.env.PRINTIFY_API_KEY,
-          shopId: process.env.PRINTIFY_SHOP_ID,
-          developmentMode: process.env.NODE_ENV === "development",
-          webhookBaseUrl: process.env.WEBHOOK_BASE_URL,
-        },
-        sync: {
-          enabled: process.env.PRINTIFY_SYNC_ENABLED !== "false",
-          frequency: parseInt(process.env.PRINTIFY_SYNC_FREQUENCY || "60"),
-          batchSize: parseInt(process.env.PRINTIFY_SYNC_BATCH_SIZE || "100"),
-        },
-        logging: {
-          level: process.env.PRINTIFY_LOG_LEVEL || (process.env.NODE_ENV === "development" ? "debug" : "info"),
-          structured: process.env.PRINTIFY_STRUCTURED_LOGGING !== "false",
-        },
-      },
-    },
-  ],
 })
