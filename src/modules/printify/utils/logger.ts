@@ -20,11 +20,19 @@ export interface LogEntry {
   error?: Error;
 }
 
+export interface MedusaLoggerLike {
+  info: (message: string) => void;
+  warn: (message: string) => void;
+  error: (message: string) => void;
+  debug: (message: string) => void;
+}
+
 export interface LoggerConfig {
   level: LogLevel;
   prefix?: string;
   enableColors?: boolean;
   enableTimestamp?: boolean;
+  medusaLogger?: MedusaLoggerLike;
 }
 
 /**
@@ -176,6 +184,27 @@ export class Logger {
    * Output formatted message to appropriate target
    */
   private output(level: LogLevel, message: string): void {
+    const ml = this.config.medusaLogger;
+    if (ml) {
+      switch (level) {
+        case LogLevel.ERROR:
+          ml.error(message);
+          break;
+        case LogLevel.WARN:
+          ml.warn(message);
+          break;
+        case LogLevel.INFO:
+          ml.info(message);
+          break;
+        case LogLevel.DEBUG:
+          ml.debug(message);
+          break;
+        default:
+          ml.info(message);
+      }
+      return;
+    }
+
     switch (level) {
       case LogLevel.ERROR:
         console.error(message);
@@ -202,6 +231,13 @@ export class Logger {
       ...this.config,
       prefix: this.config.prefix ? `${this.config.prefix}:${prefix}` : prefix,
     });
+  }
+
+  /**
+   * Set the MedusaJS logger backend, routing all output through it
+   */
+  setMedusaLogger(medusaLogger: MedusaLoggerLike): void {
+    this.config.medusaLogger = medusaLogger;
   }
 
   /**

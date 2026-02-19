@@ -25,9 +25,16 @@ const fetchPrintifyProductsStep = createStep(
     const config = await printifyService.retrievePrintifyConfiguration(input.config_id)
 
     const { PrintifyApiClient } = await import("../modules/printify/services/printify-api-client.js")
+    let resolvedLogger: any
+    try {
+      resolvedLogger = container.resolve("logger")
+    } catch {
+      // logger not available in this context
+    }
     const apiClient = new PrintifyApiClient({
       apiKey: config.printify_api_key,
       shopId: config.printify_shop_id,
+      logger: resolvedLogger,
     })
 
     const allProducts: any[] = []

@@ -7,11 +7,19 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
  * error handling, rate limiting, and response parsing.
  */
 
+export interface PrintifyApiLogger {
+  info?: (message: string) => void;
+  warn?: (message: string) => void;
+  error?: (message: string) => void;
+  debug?: (message: string) => void;
+}
+
 export interface PrintifyApiConfig {
   apiKey: string;
   shopId: string;
   timeout?: number;
   baseUrl?: string;
+  logger?: PrintifyApiLogger;
 }
 
 export interface PrintifyProduct {
@@ -132,11 +140,11 @@ export class PrintifyApiClient {
     // Request interceptor for logging
     instance.interceptors.request.use(
       (config) => {
-        console.log(`🌐 Printify API Request: ${config.method?.toUpperCase()} ${config.url}`);
+        this.config.logger?.debug?.(`Printify API Request: ${config.method?.toUpperCase()} ${config.url}`);
         return config;
       },
       (error) => {
-        console.error('❌ Printify API Request Error:', error);
+        this.config.logger?.error?.(`Printify API Request Error: ${error}`);
         return Promise.reject(error);
       }
     );
@@ -144,12 +152,12 @@ export class PrintifyApiClient {
     // Response interceptor for error handling
     instance.interceptors.response.use(
       (response) => {
-        console.log(`✅ Printify API Response: ${response.status} ${response.config.url}`);
+        this.config.logger?.debug?.(`Printify API Response: ${response.status} ${response.config.url}`);
         return response;
       },
       (error) => {
         const printifyError = this.handleApiError(error);
-        console.error('❌ Printify API Error:', printifyError);
+        this.config.logger?.error?.(`Printify API Error: ${JSON.stringify(printifyError)}`);
         return Promise.reject(printifyError);
       }
     );
@@ -263,7 +271,7 @@ export class PrintifyApiClient {
       await this.getShop();
       return true;
     } catch (error) {
-      console.error('❌ Printify API connection test failed:', error);
+      this.config.logger?.error?.(`Printify API connection test failed: ${error}`);
       return false;
     }
   }

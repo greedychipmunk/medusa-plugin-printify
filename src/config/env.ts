@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { createLogger } from '../modules/printify/utils/logger';
 
 // Environment variable schema for validation
 export const envSchema = z.object({
@@ -31,12 +32,14 @@ export const envSchema = z.object({
 
 export type PluginConfig = z.infer<typeof envSchema>;
 
+const envLogger = createLogger('Printify:Config');
+
 // Parse and validate environment variables
 export function validateConfig(): PluginConfig {
   try {
     return envSchema.parse(process.env);
   } catch (error) {
-    console.error('❌ Invalid plugin configuration:', error);
+    envLogger.error('Invalid plugin configuration', error as Error);
     throw new Error('Plugin configuration validation failed');
   }
 }

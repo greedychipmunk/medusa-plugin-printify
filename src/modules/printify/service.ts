@@ -181,6 +181,15 @@ class PrintifyModuleService extends MedusaService({
     return (this as any).__container__
   }
 
+  // Resolve the MedusaJS logger from the DI container (if available)
+  private get containerLogger(): Record<string, Function> | undefined {
+    try {
+      return this.container?.resolve?.("logger") as any
+    } catch {
+      return undefined
+    }
+  }
+
   // ── Configuration Business Logic ────────────────────────────────
 
   async getConfigurationByStoreId(storeId: string) {
@@ -236,7 +245,7 @@ class PrintifyModuleService extends MedusaService({
 
   async testApiConnection(apiKey: string, shopId: string): Promise<ConfigurationTestResult> {
     try {
-      const client = new PrintifyApiClient({ apiKey, shopId })
+      const client = new PrintifyApiClient({ apiKey, shopId, logger: this.containerLogger as any })
       const shopInfo = await client.getShop()
       return {
         success: true,
@@ -474,6 +483,7 @@ class PrintifyModuleService extends MedusaService({
       const apiClient = new PrintifyApiClient({
         apiKey: config.printify_api_key,
         shopId: config.printify_shop_id,
+        logger: this.containerLogger as any,
       })
 
       const printifyProducts = await this.fetchAllPrintifyProducts(apiClient)
@@ -1145,6 +1155,7 @@ class PrintifyModuleService extends MedusaService({
     return new PrintifyApiClient({
       apiKey: config.printify_api_key,
       shopId: config.printify_shop_id,
+      logger: this.containerLogger as any,
     })
   }
 
@@ -1161,6 +1172,7 @@ class PrintifyModuleService extends MedusaService({
     return new PrintifyApiClient({
       apiKey: config.printify_api_key,
       shopId: config.printify_shop_id,
+      logger: this.containerLogger as any,
     })
   }
 

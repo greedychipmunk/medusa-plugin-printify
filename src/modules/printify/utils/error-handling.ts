@@ -220,7 +220,8 @@ export class RetryUtil {
     fn: () => Promise<T>,
     maxRetries: number = 3,
     baseDelayMs: number = 1000,
-    maxDelayMs: number = 10000
+    maxDelayMs: number = 10000,
+    logger?: { warn: (message: string) => void }
   ): Promise<T> {
     let lastError: Error;
 
@@ -243,7 +244,12 @@ export class RetryUtil {
         // Calculate delay with exponential backoff
         const delay = Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
         
-        console.warn(`⚠️  Attempt ${attempt + 1} failed, retrying in ${delay}ms:`, (error as Error).message);
+        const msg = `Attempt ${attempt + 1} failed, retrying in ${delay}ms: ${(error as Error).message}`;
+        if (logger) {
+          logger.warn(msg);
+        } else {
+          console.warn(msg);
+        }
         
         await this.delay(delay);
       }

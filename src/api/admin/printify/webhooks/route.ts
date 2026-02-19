@@ -27,6 +27,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     const apiClient = new PrintifyApiClient({
       apiKey: config.printify_api_key,
       shopId: config.printify_shop_id,
+      logger: req.scope.resolve("logger") as any,
     })
 
     const webhooks = await apiClient.listWebhooks()
@@ -74,6 +75,7 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
     const apiClient = new PrintifyApiClient({
       apiKey: config.printify_api_key,
       shopId: config.printify_shop_id,
+      logger: req.scope.resolve("logger") as any,
     })
 
     const secret = config.webhook_secret || undefined
