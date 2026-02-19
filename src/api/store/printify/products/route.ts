@@ -6,6 +6,12 @@ import { ErrorCode } from "../../../../modules/printify/utils/error-handling"
 
 const apiLogger = logger.child("StoreProductsAPI")
 
+function getPreviewImageUrl(images: any): string | null {
+  if (!Array.isArray(images) || images.length === 0) return null
+  const defaultImg = images.find((img: any) => img.is_default)
+  return (defaultImg || images[0])?.src || null
+}
+
 export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void> {
   try {
     const printifyService: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
@@ -26,6 +32,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
         title: product.title,
         description: product.description,
         enabled: product.enabled,
+        preview_image_url: getPreviewImageUrl(product.images),
         medusa_product_id: product.medusa_product_id || null,
         created_at: product.created_at,
         updated_at: product.updated_at,
