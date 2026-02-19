@@ -29,6 +29,10 @@ export interface PrintifyOrderType {
   line_items: any[];
   shipping_address: any;
   total_price: number;
+  subtotal?: number;
+  shipping_cost?: number;
+  tax_amount?: number;
+  discount_amount?: number;
   tracking?: any;
   printify_data?: any;
   submitted_at?: Date;

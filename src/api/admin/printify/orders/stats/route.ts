@@ -21,7 +21,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       dateTo = new Date(date_to as string)
     }
 
-    const stats = await printifyService.getOrderStatsForConfig()
+    const stats = await printifyService.getOrderStatsForConfig(undefined, dateFrom, dateTo)
 
     res.json({
       success: true,
