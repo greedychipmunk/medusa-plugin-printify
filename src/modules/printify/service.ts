@@ -11,6 +11,7 @@ import { PRINTIFY_MODULE } from "./index"
 import PrintifyConfiguration from "./models/printify-configuration"
 import PrintifyProduct from "./models/printify-product"
 import PrintifyOrder from "./models/printify-order"
+import PrintifyWebhookEvent from "./models/printify-webhook-event"
 import { PrintifyOrderStatus } from "./models/printify-order"
 import { PrintifyCartItem, PrintifyCartItemOptions } from "./models/printify-cart-item"
 import { PrintifyProductVariant } from "./models/printify-product-variant"
@@ -21,6 +22,7 @@ import { PrintifyOrderBridge } from "./utils/dml-bridge"
 import { logger } from "./utils/logger"
 import { PrintifyPluginError, ErrorCode, ErrorSeverity, ErrorFactory } from "./utils/error-handling"
 import { DEFAULT_SHIPPING_METHOD, DEFAULT_MAX_ORDER_RETRIES, normalizePrintifyAddress, canTransitionTo, validateShippingMethod } from "./utils/order-utils"
+import crypto from "crypto"
 
 // ── Interfaces ──────────────────────────────────────────────────────
 
@@ -33,6 +35,7 @@ export interface CreateConfigurationParams {
   sync_frequency?: number
   auto_submit_orders?: boolean
   max_order_retries?: number
+  webhook_retention_days?: number
 }
 
 export interface UpdateConfigurationParams {
@@ -43,6 +46,7 @@ export interface UpdateConfigurationParams {
   sync_frequency?: number
   auto_submit_orders?: boolean
   max_order_retries?: number
+  webhook_retention_days?: number
 }
 
 export interface ConfigurationTestResult {
@@ -164,12 +168,40 @@ export interface CartSummary {
   requiresCustomization: boolean
 }
 
+export interface StoreWebhookEventParams {
+  configuration_id: string
+  event_type: string
+  payload: any
+  signature?: string | null
+  processing_status: "success" | "failed"
+  processing_error?: string | null
+  received_at: Date
+  processed_at?: Date | null
+}
+
+export interface WebhookEventListOptions {
+  event_type?: string
+  processing_status?: string
+  configuration_id?: string
+  received_after?: Date
+  received_before?: Date
+  limit?: number
+  offset?: number
+}
+
+export type WebhookEventDispatchFn = (
+  service: PrintifyModuleService,
+  event: any,
+  config: any,
+) => Promise<void>
+
 // ── MedusaService Base ──────────────────────────────────────────────
 
 class PrintifyModuleService extends MedusaService({
   PrintifyConfiguration,
   PrintifyProduct,
   PrintifyOrder,
+  PrintifyWebhookEvent,
 }) {
   private log = logger.child("PrintifyModuleService")
 
@@ -1289,6 +1321,142 @@ class PrintifyModuleService extends MedusaService({
       })
       return this.getOrderBridge(printifyOrderId)
     }
+  }
+
+  // ── Webhook Event Storage & Replay ──────────────────────────────
+
+  async storeWebhookEvent(params: StoreWebhookEventParams) {
+    const results = await this.createPrintifyWebhookEvents([{
+      configuration_id: params.configuration_id,
+      event_type: params.event_type,
+      payload: params.payload,
+      signature: params.signature ?? null,
+      processing_status: params.processing_status,
+      processing_error: params.processing_error ?? null,
+      received_at: params.received_at,
+      processed_at: params.processed_at ?? null,
+    }])
+    return Array.isArray(results) ? results[0] : results
+  }
+
+  async listWebhookEventsFiltered(options: WebhookEventListOptions = {}): Promise<{
+    events: any[]
+    total: number
+    hasMore: boolean
+  }> {
+    const {
+      event_type,
+      processing_status,
+      configuration_id,
+      received_after,
+      received_before,
+      limit = 20,
+      offset = 0,
+    } = options
+
+    const filters: Record<string, any> = {}
+    if (event_type) filters.event_type = event_type
+    if (processing_status) filters.processing_status = processing_status
+    if (configuration_id) filters.configuration_id = configuration_id
+
+    const [events, count] = await this.listAndCountPrintifyWebhookEvents({
+      filters,
+      skip: offset,
+      take: limit,
+      order: { received_at: "desc" },
+    })
+
+    let filtered = events
+    if (received_after) {
+      filtered = filtered.filter((e: any) => new Date(e.received_at) >= received_after)
+    }
+    if (received_before) {
+      filtered = filtered.filter((e: any) => new Date(e.received_at) <= received_before)
+    }
+
+    return {
+      events: filtered,
+      total: count,
+      hasMore: offset + limit < count,
+    }
+  }
+
+  async replayWebhookEvent(
+    eventId: string,
+    dispatchFn: WebhookEventDispatchFn,
+  ): Promise<{ success: boolean; error?: string }> {
+    const event = await this.retrievePrintifyWebhookEvent(eventId)
+
+    // Re-verify HMAC signature against current webhook_secret
+    const [config] = await this.listPrintifyConfigurations({
+      filters: { id: event.configuration_id },
+    })
+
+    if (config?.webhook_secret && event.signature) {
+      const expected = crypto
+        .createHmac("sha256", config.webhook_secret)
+        .update(JSON.stringify(event.payload), "utf8")
+        .digest("hex")
+      if (
+        event.signature.length !== expected.length ||
+        !crypto.timingSafeEqual(
+          Buffer.from(event.signature),
+          Buffer.from(expected),
+        )
+      ) {
+        await this.updatePrintifyWebhookEvents([{
+          id: eventId,
+          processing_status: "failed",
+          processing_error: "Signature re-verification failed",
+          processed_at: new Date(),
+        }])
+        return { success: false, error: "Signature re-verification failed" }
+      }
+    }
+
+    try {
+      await dispatchFn(this, event.payload, config)
+
+      await this.updatePrintifyWebhookEvents([{
+        id: eventId,
+        processing_status: "replayed",
+        processing_error: null,
+        processed_at: new Date(),
+      }])
+
+      return { success: true }
+    } catch (error) {
+      const errorMessage = (error as Error).message
+      await this.updatePrintifyWebhookEvents([{
+        id: eventId,
+        processing_status: "failed",
+        processing_error: errorMessage,
+        processed_at: new Date(),
+      }])
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  async cleanupOldWebhookEvents(configurationId: string): Promise<number> {
+    const [config] = await this.listPrintifyConfigurations({
+      filters: { id: configurationId },
+    })
+    const retentionDays = config?.webhook_retention_days ?? 30
+    const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000)
+
+    const events = await this.listPrintifyWebhookEvents({
+      filters: { configuration_id: configurationId },
+    })
+
+    const toDelete = events.filter(
+      (e: any) => new Date(e.received_at) < cutoff,
+    )
+
+    if (toDelete.length > 0) {
+      await this.deletePrintifyWebhookEvents(toDelete.map((e: any) => e.id))
+    }
+
+    return toDelete.length
   }
 
 }
