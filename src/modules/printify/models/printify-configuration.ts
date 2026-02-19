@@ -15,6 +15,7 @@ export interface PrintifyConfigurationData {
   sync_frequency?: number;
   auto_submit_orders?: boolean;
   max_order_retries?: number;
+  retry_backoff_minutes?: number;
 }
 
 const PrintifyConfiguration = model.define("PrintifyConfiguration", {
@@ -27,6 +28,7 @@ const PrintifyConfiguration = model.define("PrintifyConfiguration", {
   sync_frequency: model.number().default(60), // minutes
   auto_submit_orders: model.boolean().default(false),
   max_order_retries: model.number().default(3), // DEFAULT_MAX_ORDER_RETRIES
+  retry_backoff_minutes: model.number().default(5), // DEFAULT_RETRY_BACKOFF_MINUTES
 });
 
 export default PrintifyConfiguration;

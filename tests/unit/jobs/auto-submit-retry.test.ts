@@ -31,13 +31,16 @@ function buildContainer(configs: any[] = [], orders: any[] = []) {
   } as any
 }
 
-function buildOrder(id: string, configId: string = "config-1", retryCount: number = 0) {
+function buildOrder(id: string, configId: string = "config-1", retryCount: number = 0, lastErrorAt?: Date) {
+  // Default to far past so existing tests always pass backoff check
+  const errorAt = lastErrorAt ?? (retryCount > 0 ? new Date("2020-01-01T00:00:00Z") : null)
   return {
     id,
     status: "pending",
-    entity: { configuration_id: configId, retry_count: retryCount },
+    entity: { configuration_id: configId, retry_count: retryCount, last_error_at: errorAt },
     configuration_id: configId,
     retry_count: retryCount,
+    last_error_at: errorAt,
   }
 }
 
@@ -150,7 +153,38 @@ describe("auto-submit-orders retry & dead-letter", () => {
     ])
   })
 
-  // 6. Tracks orders_dead_lettered in activity store
+  // 6. Skips orders still in backoff window
+  it("should skip orders still in backoff window", async () => {
+    mockWorkflowRun.mockResolvedValue({ result: {} })
+
+    const container = buildContainer(
+      [{ id: "config-1", auto_submit_orders: true, store_id: "store-1" }],
+      [buildOrder("order-1", "config-1", 1, new Date())], // last_error_at = now → in backoff
+    )
+
+    await autoSubmitOrdersJob(container)
+
+    // Order should be skipped entirely — no workflow call, no update
+    expect(mockWorkflowRun).not.toHaveBeenCalled()
+    expect(mockUpdateOrders).not.toHaveBeenCalled()
+  })
+
+  // 7. Retries orders past backoff window
+  it("should retry orders past backoff window", async () => {
+    mockWorkflowRun.mockResolvedValue({ result: {} })
+
+    const container = buildContainer(
+      [{ id: "config-1", auto_submit_orders: true, store_id: "store-1" }],
+      // retry_count=1, base=5min → delay=5min. Last error 10 min ago → ready
+      [buildOrder("order-1", "config-1", 1, new Date(Date.now() - 10 * 60 * 1000))],
+    )
+
+    await autoSubmitOrdersJob(container)
+
+    expect(mockWorkflowRun).toHaveBeenCalledTimes(1)
+  })
+
+  // 8. Tracks orders_dead_lettered in activity store
   it("should track orders_dead_lettered in activity store", async () => {
     mockWorkflowRun.mockRejectedValueOnce(new Error("Final failure"))
 

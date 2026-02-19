@@ -397,6 +397,29 @@ describe("Integration: auto-submit-orders job", () => {
     expect(activity.order_auto_submit.orders_dead_lettered).toBe(1)
   })
 
+  it("skips orders still in backoff window during auto-submit", async () => {
+    ctx.stores.configurations.create([
+      { id: "config_auto", store_id: "s1", auto_submit_orders: true, printify_api_key: "k", printify_shop_id: "sh" },
+    ])
+
+    ctx.stores.orders.create([
+      // retry_count=1, last_error_at = just now → in backoff (needs 5 min)
+      { id: "ord_backoff", medusa_order_id: "med_bo", status: "pending", configuration_id: "config_auto", total_price: 1000, line_items: [], shipping_address: {}, retry_count: 1, last_error_at: new Date() },
+      // retry_count=0 → always ready
+      { id: "ord_fresh", medusa_order_id: "med_fresh", status: "pending", configuration_id: "config_auto", total_price: 2000, line_items: [], shipping_address: {}, retry_count: 0 },
+    ])
+
+    mockSubmitRun.mockResolvedValue({ result: {} })
+
+    await autoSubmitOrdersJob(buildContainer(ctx))
+
+    // Only the fresh order should be submitted
+    expect(mockSubmitRun).toHaveBeenCalledTimes(1)
+
+    const activity = automationActivityStore.get("config_auto")
+    expect(activity.order_auto_submit.orders_submitted).toBe(1)
+  })
+
   it("records job-level failure in activity store", async () => {
     ctx.stores.configurations.create([
       { id: "config_auto", store_id: "s1", auto_submit_orders: true, printify_api_key: "k", printify_shop_id: "sh" },
