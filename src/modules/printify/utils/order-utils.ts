@@ -6,6 +6,9 @@
  */
 
 import { PrintifyOrderStatus } from "../models/printify-order"
+import type { PrintifyApiClient, PrintifyShippingRequest } from "../services/printify-api-client"
+import type { PrintifyOrderBridge } from "./dml-bridge"
+import { shippingRateCache } from "./shipping-cache"
 
 /** Default Printify shipping method ID used when none is specified. */
 export const DEFAULT_SHIPPING_METHOD = 1
@@ -31,6 +34,46 @@ export const ORDER_TRANSITIONS: Record<PrintifyOrderStatus, PrintifyOrderStatus[
 
 export function canTransitionTo(from: PrintifyOrderStatus, to: PrintifyOrderStatus): boolean {
   return ORDER_TRANSITIONS[from]?.includes(to) ?? false
+}
+
+/**
+ * Validates that the shipping method ID is available for the given order's
+ * items and destination address by querying the Printify shipping API.
+ * Uses the shipping rate cache to avoid redundant API calls.
+ */
+export async function validateShippingMethod(
+  apiClient: PrintifyApiClient,
+  order: PrintifyOrderBridge,
+  overrideMethod?: number,
+): Promise<void> {
+  const effectiveMethod = overrideMethod ?? order.shippingMethod ?? DEFAULT_SHIPPING_METHOD
+
+  const lineItems = (order.items || []).map((item: any) => ({
+    product_id: item.printifyProductId || item.product_id,
+    variant_id: typeof item.printifyVariantId !== "undefined" ? item.printifyVariantId : item.variant_id,
+    quantity: item.quantity,
+  }))
+
+  const addressTo = normalizePrintifyAddress(order.shippingAddress)
+
+  // Check cache first
+  let options = shippingRateCache.get(lineItems, addressTo)
+  if (!options) {
+    const shippingRequest: PrintifyShippingRequest = {
+      line_items: lineItems,
+      address_to: addressTo,
+    }
+    options = await apiClient.calculateShipping(shippingRequest)
+    shippingRateCache.set(lineItems, addressTo, options)
+  }
+
+  const valid = options.some((opt) => opt.id === effectiveMethod)
+  if (!valid) {
+    const available = options.map((o) => `${o.id} (${o.name})`).join(", ")
+    throw new Error(
+      `Shipping method ${effectiveMethod} is not available for this order. Available: ${available}`,
+    )
+  }
 }
 
 /**
