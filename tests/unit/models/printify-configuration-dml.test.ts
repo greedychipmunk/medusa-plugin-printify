@@ -196,9 +196,55 @@ describe('PrintifyConfiguration DML Model', () => {
         created_at: new Date(),
         updated_at: new Date(),
       };
-      
+
       expect(config.created_at).toBeInstanceOf(Date);
       expect(config.updated_at).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('notification fields', () => {
+    it('should support nullable notification_emails field', () => {
+      const config = {
+        ...mockConfigurationData,
+        notification_emails: 'admin@test.com, ops@test.com',
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+
+      expect(config.notification_emails).toBe('admin@test.com, ops@test.com');
+    });
+
+    it('should default notify booleans to true', () => {
+      // DML defines defaults: notify_dead_lettered_orders, notify_failed_syncs, notify_webhook_errors all default to true
+      const config = {
+        ...mockConfigurationData,
+        notify_dead_lettered_orders: true,
+        notify_failed_syncs: true,
+        notify_webhook_errors: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+
+      expect(config.notify_dead_lettered_orders).toBe(true);
+      expect(config.notify_failed_syncs).toBe(true);
+      expect(config.notify_webhook_errors).toBe(true);
+    });
+
+    it('should allow notification flags to be set to false', () => {
+      const config = {
+        ...mockConfigurationData,
+        notification_emails: null,
+        notify_dead_lettered_orders: false,
+        notify_failed_syncs: false,
+        notify_webhook_errors: false,
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+
+      expect(config.notification_emails).toBeNull();
+      expect(config.notify_dead_lettered_orders).toBe(false);
+      expect(config.notify_failed_syncs).toBe(false);
+      expect(config.notify_webhook_errors).toBe(false);
     });
   });
 });

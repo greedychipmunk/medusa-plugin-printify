@@ -20,6 +20,10 @@ const createConfigSchema = z.object({
   sync_enabled: z.boolean().default(true),
   sync_frequency: z.number().min(5).max(1440).default(60),
   auto_submit_orders: z.boolean().default(false),
+  notification_emails: z.string().optional(),
+  notify_dead_lettered_orders: z.boolean().default(true),
+  notify_failed_syncs: z.boolean().default(true),
+  notify_webhook_errors: z.boolean().default(true),
 })
 
 const updateConfigSchema = z.object({
@@ -29,6 +33,10 @@ const updateConfigSchema = z.object({
   sync_enabled: z.boolean().optional(),
   sync_frequency: z.number().min(5).max(1440).optional(),
   auto_submit_orders: z.boolean().optional(),
+  notification_emails: z.string().optional(),
+  notify_dead_lettered_orders: z.boolean().optional(),
+  notify_failed_syncs: z.boolean().optional(),
+  notify_webhook_errors: z.boolean().optional(),
 })
 
 const apiLogger = logger.child("AdminConfigAPI")
@@ -66,6 +74,10 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
         auto_submit_orders: configuration.auto_submit_orders,
         has_api_key: !!configuration.printify_api_key,
         has_webhook_secret: !!configuration.webhook_secret,
+        notification_emails: (configuration as any).notification_emails ?? null,
+        notify_dead_lettered_orders: (configuration as any).notify_dead_lettered_orders ?? true,
+        notify_failed_syncs: (configuration as any).notify_failed_syncs ?? true,
+        notify_webhook_errors: (configuration as any).notify_webhook_errors ?? true,
         created_at: configuration.created_at,
         updated_at: configuration.updated_at,
       },
@@ -123,6 +135,10 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
         sync_enabled: configuration?.sync_enabled,
         sync_frequency: configuration?.sync_frequency,
         auto_submit_orders: configuration?.auto_submit_orders,
+        notification_emails: (configuration as any)?.notification_emails ?? null,
+        notify_dead_lettered_orders: (configuration as any)?.notify_dead_lettered_orders ?? true,
+        notify_failed_syncs: (configuration as any)?.notify_failed_syncs ?? true,
+        notify_webhook_errors: (configuration as any)?.notify_webhook_errors ?? true,
         created_at: configuration?.created_at,
         updated_at: configuration?.updated_at,
       },
@@ -189,6 +205,10 @@ export async function PUT(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       sync_enabled: configData.sync_enabled ?? existing.sync_enabled,
       sync_frequency: configData.sync_frequency ?? existing.sync_frequency,
       auto_submit_orders: configData.auto_submit_orders ?? existing.auto_submit_orders,
+      notification_emails: configData.notification_emails ?? (existing as any).notification_emails ?? undefined,
+      notify_dead_lettered_orders: configData.notify_dead_lettered_orders ?? (existing as any).notify_dead_lettered_orders,
+      notify_failed_syncs: configData.notify_failed_syncs ?? (existing as any).notify_failed_syncs,
+      notify_webhook_errors: configData.notify_webhook_errors ?? (existing as any).notify_webhook_errors,
     })
 
     res.status(200).json({
@@ -201,6 +221,10 @@ export async function PUT(req: AuthenticatedMedusaRequest, res: MedusaResponse):
         sync_enabled: configuration?.sync_enabled,
         sync_frequency: configuration?.sync_frequency,
         auto_submit_orders: configuration?.auto_submit_orders,
+        notification_emails: (configuration as any)?.notification_emails ?? null,
+        notify_dead_lettered_orders: (configuration as any)?.notify_dead_lettered_orders ?? true,
+        notify_failed_syncs: (configuration as any)?.notify_failed_syncs ?? true,
+        notify_webhook_errors: (configuration as any)?.notify_webhook_errors ?? true,
         updated_at: configuration?.updated_at,
       },
     })

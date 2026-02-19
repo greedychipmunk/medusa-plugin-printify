@@ -7,6 +7,13 @@
 
 import crypto from "crypto"
 
+// Mock notification emitter
+const mockEmitNotification = jest.fn().mockResolvedValue(undefined)
+jest.mock("../../../src/modules/printify/utils/notification-emitter", () => ({
+  __esModule: true,
+  emitNotification: (...args: any[]) => mockEmitNotification(...args),
+}))
+
 import { POST } from "../../../src/api/webhooks/printify/route"
 
 const WEBHOOK_SECRET = "test-webhook-secret"
@@ -68,6 +75,10 @@ function buildReqRes(body: any, service: any, includeSignature = true) {
 }
 
 describe("Webhook Endpoints", () => {
+  beforeEach(() => {
+    mockEmitNotification.mockClear()
+  })
+
   describe("POST /webhooks/printify", () => {
     // 1. Verifies valid HMAC-SHA256 signature
     it("should accept request with valid HMAC-SHA256 signature", async () => {
@@ -407,6 +418,47 @@ describe("Webhook Endpoints", () => {
 
       expect(res.status).toHaveBeenCalledWith(200)
       expect(res.json).toHaveBeenCalledWith({ received: true })
+    })
+
+    // 17. Emits notification on webhook processing error
+    it("should emit notification when webhook handler throws", async () => {
+      const service = buildMockService({
+        getOrderByPrintifyId: jest.fn().mockRejectedValue(new Error("DB down")),
+      })
+
+      const body = {
+        type: "order:status-changed",
+        resource: { id: "r1", type: "order", data: { id: "printify-123", status: "shipped", shop_id: "s1" } },
+        created_at: "2026-01-01T00:00:00Z",
+      }
+      const { req, res } = buildReqRes(body, service)
+
+      await POST(req, res)
+
+      expect(mockEmitNotification).toHaveBeenCalledWith(
+        req.scope,
+        expect.objectContaining({ id: "config-1" }),
+        "printify.webhook.failed",
+        expect.objectContaining({
+          webhook_event_type: "order:status-changed",
+          error_message: "DB down",
+        }),
+      )
+    })
+
+    // 18. Does not emit notification when webhook succeeds
+    it("should not emit notification when webhook processing succeeds", async () => {
+      const service = buildMockService()
+      const body = {
+        type: "shop:disconnected",
+        resource: { id: "r1", type: "shop", data: { id: "s1", shop_id: "shop-1" } },
+        created_at: "2026-01-01T00:00:00Z",
+      }
+      const { req, res } = buildReqRes(body, service)
+
+      await POST(req, res)
+
+      expect(mockEmitNotification).not.toHaveBeenCalled()
     })
   })
 })

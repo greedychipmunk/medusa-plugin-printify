@@ -11,6 +11,13 @@ jest.mock("../../../src/workflows/submit-printify-order", () => ({
   submitPrintifyOrderWorkflow: jest.fn(),
 }))
 
+// Mock notification emitter
+const mockEmitNotification = jest.fn().mockResolvedValue(undefined)
+jest.mock("../../../src/modules/printify/utils/notification-emitter", () => ({
+  __esModule: true,
+  emitNotification: (...args: any[]) => mockEmitNotification(...args),
+}))
+
 import autoSubmitOrdersJob, { config } from "../../../src/jobs/auto-submit-orders"
 import { submitPrintifyOrderWorkflow } from "../../../src/workflows/submit-printify-order"
 
@@ -42,6 +49,7 @@ function buildOrder(id: string, configId: string = "default") {
 describe("auto-submit-orders job", () => {
   beforeEach(() => {
     ;(submitPrintifyOrderWorkflow as jest.Mock).mockReturnValue({ run: mockWorkflowRun })
+    mockEmitNotification.mockClear()
   })
 
   afterEach(() => {
@@ -99,7 +107,53 @@ describe("auto-submit-orders job", () => {
     expect(activity.order_auto_submit.orders_failed).toBe(1)
   })
 
-  // 5. Updates activity on job failure
+  // 5. Emits notification on dead-letter
+  it("should emit notification when order is dead-lettered", async () => {
+    mockWorkflowRun.mockRejectedValueOnce(new Error("Permanent failure"))
+
+    const config = {
+      id: "config-1",
+      auto_submit_orders: true,
+      store_id: "store-1",
+      notification_emails: "admin@test.com",
+      notify_dead_lettered_orders: true,
+    }
+
+    const container = buildContainer(
+      [config],
+      [{ id: "order-1", status: "pending", entity: { configuration_id: "config-1", retry_count: 2, last_error_at: new Date("2020-01-01") }, configuration_id: "config-1", retry_count: 2, last_error_at: new Date("2020-01-01") }],
+    )
+
+    await autoSubmitOrdersJob(container)
+
+    expect(mockEmitNotification).toHaveBeenCalledWith(
+      container,
+      config,
+      "printify.order.dead_lettered",
+      expect.objectContaining({
+        order_id: "order-1",
+        retry_count: 3,
+        error_message: "Permanent failure",
+      }),
+    )
+  })
+
+  // 6. Skips notification when flag disabled
+  it("should not emit notification when notify_dead_lettered_orders is false", async () => {
+    mockWorkflowRun.mockResolvedValue({ result: {} })
+
+    const container = buildContainer(
+      [{ id: "config-1", auto_submit_orders: true, store_id: "store-1", notify_dead_lettered_orders: false }],
+      [buildOrder("order-1", "config-1")],
+    )
+
+    await autoSubmitOrdersJob(container)
+
+    // No dead-letter happened, so no notification regardless
+    expect(mockEmitNotification).not.toHaveBeenCalled()
+  })
+
+  // 7. Updates activity on job failure
   it("should update activity on job failure", async () => {
     const mockService = {
       listAndCountPrintifyConfigurations: jest.fn().mockResolvedValue([

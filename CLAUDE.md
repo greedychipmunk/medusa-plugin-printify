@@ -73,6 +73,16 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Activity Tracking**: `orders_dead_lettered` counter in automation activity store
 - **Test Coverage**: 481/481 tests across 47 suites
 
+### Phase 11 Complete: Email Notifications via Event Bus
+- **Configuration Fields**: `notification_emails` (comma-separated), `notify_dead_lettered_orders`, `notify_failed_syncs`, `notify_webhook_errors` on configuration model
+- **Event Types**: `printify.order.dead_lettered`, `printify.sync.failed`, `printify.webhook.failed`
+- **Notification Emitter**: Config-aware, fire-and-forget utility (`emitNotification`) that checks flags, parses emails, and emits via `IEventBusService`
+- **Integration Points**: Auto-submit job (dead-lettered orders), sync job (failed syncs), webhook route (processing errors)
+- **Reference Subscriber**: `printify-notification-logger.ts` logs all events at warn level as documentation
+- **Admin UI**: Notification Settings panel with email input and 3 toggle switches
+- **Config API**: All CRUD endpoints expose notification fields via zod validation
+- **Test Coverage**: 507/507 tests across 49 suites (13 emitter + 4 config + 2 auto-submit + 2 sync + 2 webhook + 3 model tests added)
+
 ## Key Components
 
 ### Models (DML-based)
@@ -118,7 +128,7 @@ src/admin/widgets/
 - **TypeScript 5.x** with strict typing enabled
 - **MedusaJS v2.11+** modern import patterns using `@medusajs/framework`
 - **DML entities** for all data models with bridge compatibility
-- **Comprehensive testing** - maintain 100% critical path coverage (481 tests)
+- **Comprehensive testing** - maintain 100% critical path coverage (507 tests)
 - **Error handling** with retry logic and user-friendly messages
 
 ### Import Patterns (CRITICAL)
@@ -168,7 +178,7 @@ export class PrintifyOrderService {
 ## Testing Requirements
 
 ### Test Coverage
-- **481 tests total** across 47 test suites
+- **507 tests total** across 49 test suites
 - **100% success rate** required for any changes
 - **Critical path coverage** for all user-facing functionality
 - **DML model validation** with both entity and bridge patterns
@@ -195,6 +205,7 @@ tests/
 │   │   ├── webhook-endpoints.test.ts             # 16 webhook handler tests
 │   │   ├── webhook-admin-endpoints.test.ts      # 5 admin webhook tests
 │   │   ├── automation-endpoints.test.ts         # 6 automation API tests
+│   │   └── notification-config-endpoints.test.ts    # 4 notification config tests
 │   ├── order-retry-endpoint.test.ts         # 4 retry endpoint tests
 │   └── bulk-order-endpoints.test.ts         # 15 bulk order endpoint tests
 │   ├── models/
@@ -213,7 +224,8 @@ tests/
 │   └── auto-submit-retry.test.ts                # 6 retry/dead-letter tests
 │   ├── utils/
 │   │   ├── shipping-cache.test.ts                   # 7 cache tests
-│   │   └── automation-activity.test.ts              # 5 activity store tests
+│   │   ├── automation-activity.test.ts              # 5 activity store tests
+│   │   └── notification-emitter.test.ts             # 13 emitter tests
 │   └── ...
 └── setup.ts
 ```
@@ -375,6 +387,13 @@ logger.error("Failed to sync product", {
 })
 ```
 
+## Subscribers
+
+```
+src/subscribers/
+└── printify-notification-logger.ts  # Reference logger for all 3 notification events
+```
+
 ## Scheduled Jobs
 
 ```
@@ -391,7 +410,7 @@ Both jobs respect their config flags, skip when already running, and track activ
 # Development
 npm run build            # Compile TypeScript
 npm run watch           # Development with watch mode
-npm test               # Run test suite (481 tests)
+npm test               # Run test suite (507 tests)
 npm run lint           # ESLint validation
 npm run lint:fix       # Auto-fix linting issues
 
@@ -430,7 +449,7 @@ PRINTIFY_LOG_LEVEL=debug npm run dev
 When working with this plugin:
 
 1. **Always maintain modern import patterns** - use `@medusajs/framework` imports
-2. **Preserve test coverage** - all 481 tests must continue passing
+2. **Preserve test coverage** - all 507 tests must continue passing
 3. **Use DML entities** with bridge compatibility for any model changes
 4. **Follow TypeScript strict typing** - no `any` types in production code
 5. **Implement proper error handling** with retry logic for external APIs
