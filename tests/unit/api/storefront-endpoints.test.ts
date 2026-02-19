@@ -15,6 +15,15 @@ const sampleImages = [
   { src: "https://images.printify.com/mockup-3.jpg", is_default: false },
 ]
 
+const samplePrintifyData = {
+  options: [{ name: "Size", type: "size", values: [{ id: 1, title: "S" }, { id: 2, title: "M" }] }],
+  variants: [
+    { id: 1001, sku: "TSH-S", cost: 800, price: 2500, title: "Small", is_enabled: true, is_available: true, options: [1] },
+    { id: 1002, sku: "TSH-M", cost: 800, price: 2500, title: "Medium", is_enabled: true, is_available: true, options: [2] },
+  ],
+  images: [{ src: "https://images.printify.com/mockup-default.jpg", variant_ids: [1001, 1002], is_default: true }],
+}
+
 function makeProduct(overrides: Record<string, any> = {}) {
   return {
     id: "prod-1",
@@ -23,6 +32,7 @@ function makeProduct(overrides: Record<string, any> = {}) {
     enabled: true,
     medusa_product_id: "medusa-prod-1",
     images: sampleImages,
+    printify_data: samplePrintifyData,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -234,6 +244,25 @@ describe("Storefront API Endpoints", () => {
       await productDetail(req, res)
 
       expect(res.status).toHaveBeenCalledWith(404)
+    })
+
+    it("should include variants parsed from printify_data", async () => {
+      const service = buildMockService()
+      const { req, res } = buildReqRes(service, { params: { id: "prod-1" } })
+
+      await productDetail(req, res)
+
+      const body = res.json.mock.calls[0][0]
+      expect(body.data.variants).toHaveLength(2)
+      expect(body.data.variants[0]).toEqual(
+        expect.objectContaining({
+          id: 1001,
+          sku: "TSH-S",
+          price: 2500,
+          options: { Size: "S" },
+          is_available: true,
+        })
+      )
     })
 
     it("should include breadcrumbs in response", async () => {

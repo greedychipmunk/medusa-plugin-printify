@@ -19,6 +19,8 @@ import { ProductEnablementHistory } from "./models/product-enablement-history"
 import { SyncLog } from "./models/sync-log"
 import { PrintifyApiClient, PrintifyProduct as ApiProduct } from "./services/printify-api-client"
 import { PrintifyOrderBridge } from "./utils/dml-bridge"
+import { parseVariantsFromPrintifyData } from "./utils/parse-variants"
+import { variantAvailabilityCache, CachedVariant } from "./utils/variant-availability-cache"
 import { logger } from "./utils/logger"
 import { PrintifyPluginError, ErrorCode, ErrorSeverity, ErrorFactory } from "./utils/error-handling"
 import { DEFAULT_SHIPPING_METHOD, DEFAULT_MAX_ORDER_RETRIES, normalizePrintifyAddress, canTransitionTo, validateShippingMethod } from "./utils/order-utils"
@@ -1335,6 +1337,60 @@ class PrintifyModuleService extends MedusaService({
       })
       return this.getOrderBridge(printifyOrderId)
     }
+  }
+
+  // ── Variant Availability ───────────────────────────────────────
+
+  async getVariantAvailability(
+    productId: string,
+    variantIds?: string[],
+  ): Promise<{ variants: CachedVariant[]; cached: boolean; fetched_at: Date }> {
+    const product = await this.retrievePrintifyProduct(productId)
+    if (!product || !product.enabled) {
+      throw new PrintifyPluginError(
+        ErrorCode.ENTITY_NOT_FOUND,
+        "Product not found or not enabled",
+        ErrorSeverity.MEDIUM,
+        { productId },
+      )
+    }
+
+    const printifyProductId = (product as any).printify_product_id
+    if (!printifyProductId) {
+      throw new PrintifyPluginError(
+        ErrorCode.VALIDATION_ERROR,
+        "Product has no linked Printify product ID",
+        ErrorSeverity.MEDIUM,
+        { productId },
+      )
+    }
+
+    // Check cache
+    const cached = variantAvailabilityCache.get(productId)
+    if (cached) {
+      let variants = cached.variants
+      if (variantIds && variantIds.length > 0) {
+        const idSet = new Set(variantIds.map(Number))
+        variants = variants.filter((v) => idSet.has(v.id))
+      }
+      return { variants, cached: true, fetched_at: cached.fetchedAt }
+    }
+
+    // Cache miss — fetch live from Printify API
+    const configId = (product as any).configuration_id
+    const apiClient = await this.getApiClientForConfig(configId)
+    const liveProduct = await apiClient.getProduct(printifyProductId)
+
+    const allVariants = parseVariantsFromPrintifyData(liveProduct)
+    variantAvailabilityCache.set(productId, allVariants)
+
+    let variants = allVariants
+    if (variantIds && variantIds.length > 0) {
+      const idSet = new Set(variantIds.map(Number))
+      variants = variants.filter((v) => idSet.has(v.id))
+    }
+
+    return { variants, cached: false, fetched_at: new Date() }
   }
 
   // ── Webhook Event Storage & Replay ──────────────────────────────
