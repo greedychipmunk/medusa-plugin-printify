@@ -191,6 +191,38 @@ export interface WebhookEventListOptions {
   offset?: number
 }
 
+export interface TopProduct {
+  printify_product_id: string
+  title: string
+  units_sold: number
+  revenue: number
+  cost: number
+  margin_amount: number
+  margin_pct: number
+}
+
+export interface FulfillmentMetrics {
+  orders_by_status: Record<string, number>
+  avg_processing_time_hours: number
+  avg_delivery_time_hours: number
+  fulfillment_rate: number
+}
+
+export interface AnalyticsResult {
+  date_range: { from?: string; to?: string }
+  sales_summary: {
+    total_revenue: number
+    total_orders: number
+    avg_order_value: number
+    total_shipping: number
+    total_tax: number
+    total_discounts: number
+    currency: string
+  }
+  fulfillment_metrics: FulfillmentMetrics
+  top_products: TopProduct[]
+}
+
 export type WebhookEventDispatchFn = (
   service: PrintifyModuleService,
   event: any,
@@ -650,6 +682,10 @@ class PrintifyModuleService extends MedusaService({
         line_items: request.cartItems as any,
         shipping_address: request.shippingAddress,
         total_price: totalPrice,
+        subtotal: subtotal,
+        shipping_cost: shippingCost,
+        tax_amount: taxAmount,
+        discount_amount: discountAmount,
         shipping_method: request.shippingMethod || DEFAULT_SHIPPING_METHOD,
       },
     ] as any)
@@ -749,10 +785,10 @@ class PrintifyModuleService extends MedusaService({
       printifyOrderId: entity.printify_order_id || entity.printifyOrderId,
       pricing: entity.pricing || {
         total: entity.total_price,
-        subtotal: entity.total_price,
-        shippingCost: 0,
-        taxAmount: 0,
-        discountAmount: 0,
+        subtotal: entity.subtotal ?? entity.total_price,
+        shippingCost: entity.shipping_cost ?? 0,
+        taxAmount: entity.tax_amount ?? 0,
+        discountAmount: entity.discount_amount ?? 0,
         currency: "USD",
       },
       items: entity.line_items || entity.items,
@@ -891,8 +927,20 @@ class PrintifyModuleService extends MedusaService({
     }
   }
 
-  async getOrderStatsForConfig(): Promise<OrderStats> {
-    const [orders] = await this.listAndCountPrintifyOrders({})
+  async getOrderStatsForConfig(configId?: string, dateFrom?: Date, dateTo?: Date): Promise<OrderStats> {
+    const filters: Record<string, any> = {}
+    if (configId) {
+      filters.configuration_id = configId
+    }
+
+    let [orders] = await this.listAndCountPrintifyOrders({ filters })
+
+    if (dateFrom) {
+      orders = orders.filter((o: any) => new Date(o.created_at) >= dateFrom)
+    }
+    if (dateTo) {
+      orders = orders.filter((o: any) => new Date(o.created_at) <= dateTo)
+    }
 
     const stats: OrderStats = {
       total: orders.length,
@@ -1504,6 +1552,172 @@ class PrintifyModuleService extends MedusaService({
         processed_at: new Date(),
       }])
       return { success: false, error: errorMessage }
+    }
+  }
+
+  async getAnalyticsForConfig(configId?: string, dateFrom?: Date, dateTo?: Date): Promise<AnalyticsResult> {
+    const filters: Record<string, any> = {}
+    if (configId) {
+      filters.configuration_id = configId
+    }
+
+    let [allOrders] = await this.listAndCountPrintifyOrders({ filters })
+
+    // Post-filter by date range
+    if (dateFrom) {
+      allOrders = allOrders.filter((o: any) => new Date(o.created_at) >= dateFrom)
+    }
+    if (dateTo) {
+      allOrders = allOrders.filter((o: any) => new Date(o.created_at) <= dateTo)
+    }
+
+    // Exclude cancelled/failed from revenue calculations
+    const excludedStatuses = new Set([PrintifyOrderStatus.CANCELLED, PrintifyOrderStatus.FAILED])
+    const revenueOrders = allOrders.filter((o: any) => !excludedStatuses.has(o.status))
+
+    // Sales summary
+    let totalRevenue = 0
+    let totalShipping = 0
+    let totalTax = 0
+    let totalDiscounts = 0
+
+    for (const order of revenueOrders) {
+      totalRevenue += (order as any).subtotal ?? (order as any).total_price ?? 0
+      totalShipping += (order as any).shipping_cost ?? 0
+      totalTax += (order as any).tax_amount ?? 0
+      totalDiscounts += (order as any).discount_amount ?? 0
+    }
+
+    const totalOrders = revenueOrders.length
+    const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
+
+    // Fulfillment metrics
+    const ordersByStatus: Record<string, number> = {}
+    for (const order of allOrders) {
+      const status = (order as any).status || "unknown"
+      ordersByStatus[status] = (ordersByStatus[status] || 0) + 1
+    }
+
+    let totalProcessingTime = 0
+    let processedCount = 0
+    const shippedDeliveredStatuses = new Set([PrintifyOrderStatus.SHIPPED, PrintifyOrderStatus.DELIVERED])
+
+    for (const order of allOrders) {
+      if (shippedDeliveredStatuses.has((order as any).status) && (order as any).submitted_at) {
+        const processingMs = new Date((order as any).updated_at).getTime() - new Date((order as any).submitted_at).getTime()
+        totalProcessingTime += processingMs
+        processedCount++
+      }
+    }
+
+    const avgProcessingTimeHours = processedCount > 0
+      ? Math.round((totalProcessingTime / processedCount / (1000 * 60 * 60)) * 10) / 10
+      : 0
+
+    const totalNonExcluded = allOrders.length - (ordersByStatus[PrintifyOrderStatus.CANCELLED] || 0) - (ordersByStatus[PrintifyOrderStatus.FAILED] || 0)
+    const shippedDeliveredCount = (ordersByStatus[PrintifyOrderStatus.SHIPPED] || 0) + (ordersByStatus[PrintifyOrderStatus.DELIVERED] || 0)
+    const fulfillmentRate = totalNonExcluded > 0 ? Math.round((shippedDeliveredCount / totalNonExcluded) * 100) / 100 : 0
+
+    // Top products — aggregate from line_items
+    const productAgg = new Map<string, { productId: string; title: string; units: number; revenue: number; variantIds: Set<string> }>()
+
+    for (const order of revenueOrders) {
+      const items = (order as any).line_items || []
+      for (const item of items) {
+        const pid = item.printifyProductId || item.printify_product_id || "unknown"
+        const existing = productAgg.get(pid) || {
+          productId: pid,
+          title: item.title || item.productTitle || pid,
+          units: 0,
+          revenue: 0,
+          variantIds: new Set<string>(),
+        }
+        existing.units += item.quantity || 0
+        existing.revenue += (item.pricing?.totalPrice || item.pricing?.unitPrice * (item.quantity || 1) || 0)
+        if (item.printifyVariantId || item.printify_variant_id) {
+          existing.variantIds.add(String(item.printifyVariantId || item.printify_variant_id))
+        }
+        productAgg.set(pid, existing)
+      }
+    }
+
+    // Fetch products for cost data
+    const productIds = Array.from(productAgg.keys())
+    const productCostMap = new Map<string, Map<string, number>>() // productId -> variantId -> cost
+
+    for (const pid of productIds) {
+      try {
+        const [product] = await this.listPrintifyProducts({
+          filters: { printify_product_id: pid },
+        })
+        if (product?.printify_data?.variants) {
+          const variantCosts = new Map<string, number>()
+          for (const v of (product.printify_data as any).variants) {
+            variantCosts.set(String(v.id), v.cost || 0)
+          }
+          productCostMap.set(pid, variantCosts)
+        }
+      } catch {
+        // Product not found locally — cost stays 0
+      }
+    }
+
+    // Build top products with margins
+    const topProducts: TopProduct[] = Array.from(productAgg.entries())
+      .map(([pid, agg]) => {
+        let totalCost = 0
+        const costs = productCostMap.get(pid)
+        if (costs) {
+          // Sum cost for each unit sold per variant
+          for (const order of revenueOrders) {
+            const items = ((order as any).line_items || []).filter(
+              (i: any) => (i.printifyProductId || i.printify_product_id) === pid,
+            )
+            for (const item of items) {
+              const vid = String(item.printifyVariantId || item.printify_variant_id || "")
+              const unitCost = costs.get(vid) || 0
+              totalCost += unitCost * (item.quantity || 1)
+            }
+          }
+        }
+
+        const marginAmount = agg.revenue - totalCost
+        const marginPct = agg.revenue > 0 ? Math.round((marginAmount / agg.revenue) * 10000) / 100 : 0
+
+        return {
+          printify_product_id: pid,
+          title: agg.title,
+          units_sold: agg.units,
+          revenue: agg.revenue,
+          cost: totalCost,
+          margin_amount: marginAmount,
+          margin_pct: marginPct,
+        }
+      })
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 20)
+
+    return {
+      date_range: {
+        from: dateFrom?.toISOString(),
+        to: dateTo?.toISOString(),
+      },
+      sales_summary: {
+        total_revenue: totalRevenue,
+        total_orders: totalOrders,
+        avg_order_value: avgOrderValue,
+        total_shipping: totalShipping,
+        total_tax: totalTax,
+        total_discounts: totalDiscounts,
+        currency: "USD",
+      },
+      fulfillment_metrics: {
+        orders_by_status: ordersByStatus,
+        avg_processing_time_hours: avgProcessingTimeHours,
+        avg_delivery_time_hours: avgProcessingTimeHours, // same proxy — no dedicated shipped_at field
+        fulfillment_rate: fulfillmentRate,
+      },
+      top_products: topProducts,
     }
   }
 

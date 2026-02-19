@@ -10,7 +10,7 @@ jest.mock('@medusajs/framework/utils', () => {
       id: jest.fn().mockReturnValue({ primaryKey: jest.fn() }),
       text: jest.fn().mockReturnValue({ nullable: jest.fn(), unique: jest.fn(), default: jest.fn() }),
       boolean: jest.fn().mockReturnValue({ default: jest.fn() }),
-      number: jest.fn().mockReturnValue({ default: jest.fn() }),
+      number: jest.fn().mockReturnValue({ default: jest.fn().mockReturnValue({ nullable: jest.fn() }), nullable: jest.fn().mockReturnValue({ default: jest.fn() }) }),
       json: jest.fn().mockReturnValue({ nullable: jest.fn() }),
       dateTime: jest.fn().mockReturnValue({ nullable: jest.fn() }),
     },

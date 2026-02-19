@@ -27,6 +27,10 @@ const PrintifyOrder = model.define("PrintifyOrder", {
   line_items: model.json(),
   shipping_address: model.json(),
   total_price: model.number(),
+  subtotal: model.number().nullable(),
+  shipping_cost: model.number().nullable(),
+  tax_amount: model.number().nullable(),
+  discount_amount: model.number().nullable(),
   shipping_method: model.number().default(1), // DEFAULT_SHIPPING_METHOD
   tracking: model.json().nullable(),
   printify_data: model.json().nullable(),
