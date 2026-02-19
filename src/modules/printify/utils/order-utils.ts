@@ -16,6 +16,38 @@ export const DEFAULT_SHIPPING_METHOD = 1
 /** Default maximum submission retries before an order is dead-lettered. */
 export const DEFAULT_MAX_ORDER_RETRIES = 3
 
+/** Default base delay (in minutes) between retry attempts, doubled each time. */
+export const DEFAULT_RETRY_BACKOFF_MINUTES = 5
+
+/**
+ * Calculates exponential backoff delay: baseMinutes * 2^(retryCount - 1).
+ * Returns 0 for retryCount=0 (first attempt, no delay).
+ */
+export function calculateBackoffDelay(retryCount: number, baseMinutes: number = DEFAULT_RETRY_BACKOFF_MINUTES): number {
+  if (retryCount <= 0) return 0
+  return baseMinutes * Math.pow(2, retryCount - 1) * 60 * 1000
+}
+
+/**
+ * Returns true if the order is ready for another retry attempt.
+ * Orders with retry_count=0 are always ready (first attempt).
+ * Otherwise, checks if enough time has passed since last_error_at.
+ */
+export function isOrderReadyForRetry(
+  order: { retry_count?: number; last_error_at?: Date | string | null; entity?: any },
+  baseMinutes: number = DEFAULT_RETRY_BACKOFF_MINUTES,
+): boolean {
+  const retryCount = order.entity?.retry_count ?? order.retry_count ?? 0
+  if (retryCount === 0) return true
+
+  const lastErrorAt = order.entity?.last_error_at ?? order.last_error_at
+  if (!lastErrorAt) return true
+
+  const delay = calculateBackoffDelay(retryCount, baseMinutes)
+  const lastErrorTime = typeof lastErrorAt === "string" ? new Date(lastErrorAt).getTime() : lastErrorAt.getTime()
+  return Date.now() - lastErrorTime >= delay
+}
+
 /**
  * Allowed state transitions for order lifecycle.
  * Terminal states (DELIVERED, CANCELLED) have no outgoing transitions.

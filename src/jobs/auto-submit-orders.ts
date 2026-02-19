@@ -4,7 +4,7 @@ import type PrintifyModuleService from "../modules/printify/service"
 import { PrintifyOrderStatus } from "../modules/printify/models/printify-order"
 import { automationActivityStore } from "../modules/printify/utils/automation-activity"
 import { submitPrintifyOrderWorkflow } from "../workflows/submit-printify-order"
-import { DEFAULT_MAX_ORDER_RETRIES } from "../modules/printify/utils/order-utils"
+import { DEFAULT_MAX_ORDER_RETRIES, DEFAULT_RETRY_BACKOFF_MINUTES, isOrderReadyForRetry } from "../modules/printify/utils/order-utils"
 
 export default async function autoSubmitOrdersJob(container: MedusaContainer) {
   const logger = container.resolve("logger") as any
@@ -48,11 +48,22 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
         )
 
         const maxRetries = config.max_order_retries ?? DEFAULT_MAX_ORDER_RETRIES
+        const backoffMinutes = config.retry_backoff_minutes ?? DEFAULT_RETRY_BACKOFF_MINUTES
+        const retryableOrders = pendingOrders.filter((o: any) => isOrderReadyForRetry(o, backoffMinutes))
+        const skipped = pendingOrders.length - retryableOrders.length
+
+        if (skipped > 0) {
+          logger.info("Orders skipped due to backoff", {
+            configId: config.id,
+            skipped,
+          })
+        }
+
         let submitted = 0
         let failed = 0
         let deadLettered = 0
 
-        for (const order of pendingOrders) {
+        for (const order of retryableOrders) {
           try {
             await submitPrintifyOrderWorkflow(container).run({
               input: {
