@@ -29,6 +29,7 @@ export async function DELETE(req: AuthenticatedMedusaRequest, res: MedusaRespons
     const apiClient = new PrintifyApiClient({
       apiKey: config.printify_api_key,
       shopId: config.printify_shop_id,
+      logger: req.scope.resolve("logger") as any,
     })
 
     await apiClient.deleteWebhook(webhookId)

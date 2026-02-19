@@ -1,4 +1,7 @@
 import { BaseMigration, MigrationOptions } from './base';
+import { createLogger } from '../utils/logger';
+
+const migrationLogger = createLogger('Printify:Migration');
 
 /**
  * Migration: Create Printify Plugin Tables
@@ -20,13 +23,13 @@ export class CreatePrintifyTables extends BaseMigration {
   }
 
   async up(): Promise<void> {
-    console.log('📦 Creating Printify plugin tables...');
+    migrationLogger.info('Creating Printify plugin tables...');
 
     // Note: In a real Medusa implementation, this would use the actual
     // database connection and query builder. For now, this documents
     // the required schema structure.
 
-    console.log('✅ Creating printify_configurations table');
+    migrationLogger.info('Creating printify_configurations table');
     // CREATE TABLE printify_configurations (
     //   id VARCHAR(255) PRIMARY KEY,
     //   store_id VARCHAR(255) NOT NULL,
@@ -40,7 +43,7 @@ export class CreatePrintifyTables extends BaseMigration {
     //   UNIQUE(store_id)
     // );
 
-    console.log('✅ Creating printify_products table');
+    migrationLogger.info('Creating printify_products table');
     // CREATE TABLE printify_products (
     //   id VARCHAR(255) PRIMARY KEY,
     //   printify_product_id VARCHAR(255) NOT NULL,
@@ -57,7 +60,7 @@ export class CreatePrintifyTables extends BaseMigration {
     //   UNIQUE(printify_product_id, configuration_id)
     // );
 
-    console.log('✅ Creating sync_logs table');
+    migrationLogger.info('Creating sync_logs table');
     // CREATE TABLE sync_logs (
     //   id VARCHAR(255) PRIMARY KEY,
     //   configuration_id VARCHAR(255) NOT NULL,
@@ -75,7 +78,7 @@ export class CreatePrintifyTables extends BaseMigration {
     //   FOREIGN KEY (configuration_id) REFERENCES printify_configurations(id) ON DELETE CASCADE
     // );
 
-    console.log('✅ Creating product_enablement_history table');
+    migrationLogger.info('Creating product_enablement_history table');
     // CREATE TABLE product_enablement_history (
     //   id VARCHAR(255) PRIMARY KEY,
     //   product_id VARCHAR(255) NOT NULL,
@@ -92,7 +95,7 @@ export class CreatePrintifyTables extends BaseMigration {
     //   FOREIGN KEY (configuration_id) REFERENCES printify_configurations(id) ON DELETE CASCADE
     // );
 
-    console.log('✅ Creating database indexes for performance');
+    migrationLogger.info('Creating database indexes for performance');
     // CREATE INDEX idx_printify_products_enabled ON printify_products(enabled);
     // CREATE INDEX idx_printify_products_last_sync ON printify_products(last_sync_at);
     // CREATE INDEX idx_printify_products_config ON printify_products(configuration_id);
@@ -103,25 +106,25 @@ export class CreatePrintifyTables extends BaseMigration {
     // CREATE INDEX idx_enablement_history_bulk ON product_enablement_history(bulk_operation_id);
     // CREATE INDEX idx_enablement_history_created ON product_enablement_history(created_at);
 
-    console.log('🎉 Printify plugin tables created successfully');
+    migrationLogger.info('Printify plugin tables created successfully');
   }
 
   async down(): Promise<void> {
-    console.log('🗑️  Dropping Printify plugin tables...');
+    migrationLogger.info('Dropping Printify plugin tables...');
 
     // Note: In a real implementation, this would execute the actual DROP statements
-    console.log('✅ Dropping product_enablement_history table');
+    migrationLogger.info('Dropping product_enablement_history table');
     // DROP TABLE IF EXISTS product_enablement_history;
 
-    console.log('✅ Dropping sync_logs table');
+    migrationLogger.info('Dropping sync_logs table');
     // DROP TABLE IF EXISTS sync_logs;
 
-    console.log('✅ Dropping printify_products table');
+    migrationLogger.info('Dropping printify_products table');
     // DROP TABLE IF EXISTS printify_products;
 
-    console.log('✅ Dropping printify_configurations table');
+    migrationLogger.info('Dropping printify_configurations table');
     // DROP TABLE IF EXISTS printify_configurations;
 
-    console.log('🎉 Printify plugin tables dropped successfully');
+    migrationLogger.info('Printify plugin tables dropped successfully');
   }
 }

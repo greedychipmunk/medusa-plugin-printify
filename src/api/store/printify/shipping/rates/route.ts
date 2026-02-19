@@ -74,6 +74,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<voi
     const apiClient = new PrintifyApiClient({
       apiKey: config.printify_api_key,
       shopId: config.printify_shop_id,
+      logger: req.scope.resolve("logger") as any,
     })
 
     const shippingRequest = {
