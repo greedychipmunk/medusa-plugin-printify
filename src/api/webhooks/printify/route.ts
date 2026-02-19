@@ -5,6 +5,8 @@ import { PRINTIFY_MODULE } from "../../../modules/printify"
 import { PrintifyOrderStatus } from "../../../modules/printify/models/printify-order"
 import { logger } from "../../../modules/printify/utils/logger"
 import type { PrintifyWebhookEvent } from "./types"
+import { emitNotification } from "../../../modules/printify/utils/notification-emitter"
+import { PRINTIFY_EVENTS } from "../../../modules/printify/types/notification-events"
 
 const webhookLogger = logger.child("PrintifyWebhook")
 
@@ -107,6 +109,10 @@ export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<voi
     processingStatus = "failed"
     processingError = (error as Error).message
     // Still return 200 to acknowledge receipt and prevent retries
+    emitNotification(req.scope, config, PRINTIFY_EVENTS.WEBHOOK_FAILED, {
+      webhook_event_type: event.type,
+      error_message: processingError,
+    })
   }
 
   // Store the webhook event (fire-and-forget)

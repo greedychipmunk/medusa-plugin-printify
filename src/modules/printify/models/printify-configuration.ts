@@ -17,6 +17,10 @@ export interface PrintifyConfigurationData {
   max_order_retries?: number;
   retry_backoff_minutes?: number;
   webhook_retention_days?: number;
+  notification_emails?: string;
+  notify_dead_lettered_orders?: boolean;
+  notify_failed_syncs?: boolean;
+  notify_webhook_errors?: boolean;
 }
 
 const PrintifyConfiguration = model.define("PrintifyConfiguration", {
@@ -31,6 +35,10 @@ const PrintifyConfiguration = model.define("PrintifyConfiguration", {
   max_order_retries: model.number().default(3), // DEFAULT_MAX_ORDER_RETRIES
   retry_backoff_minutes: model.number().default(5), // DEFAULT_RETRY_BACKOFF_MINUTES
   webhook_retention_days: model.number().default(30),
+  notification_emails: model.text().nullable(),
+  notify_dead_lettered_orders: model.boolean().default(true),
+  notify_failed_syncs: model.boolean().default(true),
+  notify_webhook_errors: model.boolean().default(true),
 });
 
 export default PrintifyConfiguration;

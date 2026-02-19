@@ -5,6 +5,8 @@ import { PrintifyOrderStatus } from "../modules/printify/models/printify-order"
 import { automationActivityStore } from "../modules/printify/utils/automation-activity"
 import { submitPrintifyOrderWorkflow } from "../workflows/submit-printify-order"
 import { DEFAULT_MAX_ORDER_RETRIES, DEFAULT_RETRY_BACKOFF_MINUTES, isOrderReadyForRetry } from "../modules/printify/utils/order-utils"
+import { emitNotification } from "../modules/printify/utils/notification-emitter"
+import { PRINTIFY_EVENTS } from "../modules/printify/types/notification-events"
 
 export default async function autoSubmitOrdersJob(container: MedusaContainer) {
   const logger = container.resolve("logger") as any
@@ -103,6 +105,11 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
                 retryCount: currentRetryCount,
                 maxRetries,
                 error: errorMessage,
+              })
+              emitNotification(container, config, PRINTIFY_EVENTS.ORDER_DEAD_LETTERED, {
+                order_id: order.id,
+                retry_count: currentRetryCount,
+                error_message: errorMessage,
               })
             } else {
               // Increment retry count and record error

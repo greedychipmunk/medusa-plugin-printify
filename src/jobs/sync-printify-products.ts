@@ -3,6 +3,8 @@ import { PRINTIFY_MODULE } from "../modules/printify"
 import type PrintifyModuleService from "../modules/printify/service"
 import { automationActivityStore } from "../modules/printify/utils/automation-activity"
 import { syncPrintifyProductsWorkflow } from "../workflows/sync-printify-products"
+import { emitNotification } from "../modules/printify/utils/notification-emitter"
+import { PRINTIFY_EVENTS } from "../modules/printify/types/notification-events"
 
 export default async function syncPrintifyProductsJob(container: MedusaContainer) {
   const logger = container.resolve("logger") as any
@@ -85,6 +87,10 @@ export default async function syncPrintifyProductsJob(container: MedusaContainer
         logger.error("Product sync failed", {
           configId: config.id,
           error: (error as Error).message,
+        })
+        emitNotification(container, config, PRINTIFY_EVENTS.SYNC_FAILED, {
+          sync_duration_ms: duration,
+          error_message: (error as Error).message,
         })
       }
     }

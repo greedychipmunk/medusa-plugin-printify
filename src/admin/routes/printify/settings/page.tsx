@@ -23,6 +23,10 @@ interface PrintifyConfiguration {
   sync_frequency: number
   has_api_key: boolean
   has_webhook_secret: boolean
+  notification_emails: string | null
+  notify_dead_lettered_orders: boolean
+  notify_failed_syncs: boolean
+  notify_webhook_errors: boolean
   created_at: string
   updated_at: string
 }
@@ -34,6 +38,10 @@ interface ConfigurationFormData {
   sync_enabled: boolean
   sync_frequency: number
   auto_submit_orders: boolean
+  notification_emails: string
+  notify_dead_lettered_orders: boolean
+  notify_failed_syncs: boolean
+  notify_webhook_errors: boolean
 }
 
 const SYNC_FREQUENCY_OPTIONS = [
@@ -55,6 +63,10 @@ const PrintifySettingsPage = () => {
     sync_enabled: true,
     sync_frequency: 60,
     auto_submit_orders: false,
+    notification_emails: "",
+    notify_dead_lettered_orders: true,
+    notify_failed_syncs: true,
+    notify_webhook_errors: true,
   })
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -81,6 +93,10 @@ const PrintifySettingsPage = () => {
             sync_enabled: data.data.sync_enabled,
             sync_frequency: data.data.sync_frequency,
             auto_submit_orders: data.data.auto_submit_orders ?? false,
+            notification_emails: data.data.notification_emails ?? "",
+            notify_dead_lettered_orders: data.data.notify_dead_lettered_orders ?? true,
+            notify_failed_syncs: data.data.notify_failed_syncs ?? true,
+            notify_webhook_errors: data.data.notify_webhook_errors ?? true,
           }))
         }
       }
@@ -343,6 +359,70 @@ const PrintifySettingsPage = () => {
                 id="auto-submit-orders"
                 checked={formData.auto_submit_orders}
                 onCheckedChange={(checked) => handleInputChange("auto_submit_orders", checked)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Notification Settings Section */}
+        <div className="px-6 py-4">
+          <Heading level="h3" className="mb-4">Notification Settings</Heading>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="notification-emails" className="mb-2">
+                Notification Email Addresses
+              </Label>
+              <Input
+                id="notification-emails"
+                type="text"
+                placeholder="admin@example.com, ops@example.com"
+                value={formData.notification_emails}
+                onChange={(e) => handleInputChange("notification_emails", e.target.value)}
+              />
+              <Text size="small" className="text-ui-fg-subtle mt-1">
+                Comma-separated list of email addresses to receive notifications
+              </Text>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="notify-dead-lettered">Dead-Lettered Orders</Label>
+                <Text size="small" className="text-ui-fg-subtle">
+                  Notify when orders exhaust retries and are dead-lettered
+                </Text>
+              </div>
+              <Switch
+                id="notify-dead-lettered"
+                checked={formData.notify_dead_lettered_orders}
+                onCheckedChange={(checked) => handleInputChange("notify_dead_lettered_orders", checked)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="notify-failed-syncs">Failed Syncs</Label>
+                <Text size="small" className="text-ui-fg-subtle">
+                  Notify when product synchronization fails
+                </Text>
+              </div>
+              <Switch
+                id="notify-failed-syncs"
+                checked={formData.notify_failed_syncs}
+                onCheckedChange={(checked) => handleInputChange("notify_failed_syncs", checked)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="notify-webhook-errors">Webhook Errors</Label>
+                <Text size="small" className="text-ui-fg-subtle">
+                  Notify when webhook event processing fails
+                </Text>
+              </div>
+              <Switch
+                id="notify-webhook-errors"
+                checked={formData.notify_webhook_errors}
+                onCheckedChange={(checked) => handleInputChange("notify_webhook_errors", checked)}
               />
             </div>
           </div>

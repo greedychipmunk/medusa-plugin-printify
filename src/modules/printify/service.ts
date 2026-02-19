@@ -38,6 +38,10 @@ export interface CreateConfigurationParams {
   auto_submit_orders?: boolean
   max_order_retries?: number
   webhook_retention_days?: number
+  notification_emails?: string
+  notify_dead_lettered_orders?: boolean
+  notify_failed_syncs?: boolean
+  notify_webhook_errors?: boolean
 }
 
 export interface UpdateConfigurationParams {
@@ -49,6 +53,10 @@ export interface UpdateConfigurationParams {
   auto_submit_orders?: boolean
   max_order_retries?: number
   webhook_retention_days?: number
+  notification_emails?: string
+  notify_dead_lettered_orders?: boolean
+  notify_failed_syncs?: boolean
+  notify_webhook_errors?: boolean
 }
 
 export interface ConfigurationTestResult {

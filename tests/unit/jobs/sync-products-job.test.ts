@@ -11,6 +11,13 @@ jest.mock("../../../src/workflows/sync-printify-products", () => ({
   syncPrintifyProductsWorkflow: jest.fn(),
 }))
 
+// Mock notification emitter
+const mockEmitNotification = jest.fn().mockResolvedValue(undefined)
+jest.mock("../../../src/modules/printify/utils/notification-emitter", () => ({
+  __esModule: true,
+  emitNotification: (...args: any[]) => mockEmitNotification(...args),
+}))
+
 import syncPrintifyProductsJob, { config } from "../../../src/jobs/sync-printify-products"
 import { syncPrintifyProductsWorkflow } from "../../../src/workflows/sync-printify-products"
 
@@ -31,6 +38,7 @@ function buildContainer(configs: any[] = []) {
 describe("sync-printify-products job", () => {
   beforeEach(() => {
     ;(syncPrintifyProductsWorkflow as jest.Mock).mockReturnValue({ run: mockWorkflowRun })
+    mockEmitNotification.mockClear()
   })
 
   afterEach(() => {
@@ -102,5 +110,49 @@ describe("sync-printify-products job", () => {
     const activity = automationActivityStore.get("config-1")
     expect(activity.product_sync.last_sync_status).toBe("failed")
     expect(activity.product_sync.error_message).toBe("Network error")
+  })
+
+  // 6. Emits notification on sync failure
+  it("should emit notification on sync failure", async () => {
+    mockWorkflowRun.mockRejectedValue(new Error("API timeout"))
+
+    const config = {
+      id: "config-1",
+      sync_enabled: true,
+      sync_frequency: 60,
+      store_id: "store-1",
+      notification_emails: "admin@test.com",
+      notify_failed_syncs: true,
+    }
+
+    const container = buildContainer([config])
+
+    await syncPrintifyProductsJob(container)
+
+    expect(mockEmitNotification).toHaveBeenCalledWith(
+      container,
+      config,
+      "printify.sync.failed",
+      expect.objectContaining({
+        error_message: "API timeout",
+        sync_duration_ms: expect.any(Number),
+      }),
+    )
+  })
+
+  // 7. Skips notification when flag disabled
+  it("should not emit notification when notify_failed_syncs is false", async () => {
+    mockWorkflowRun.mockResolvedValue({
+      result: { synced_count: 5, failed_count: 0, skipped_count: 0 },
+    })
+
+    const container = buildContainer([
+      { id: "config-1", sync_enabled: true, sync_frequency: 60, store_id: "store-1", notify_failed_syncs: false },
+    ])
+
+    await syncPrintifyProductsJob(container)
+
+    // Sync succeeded, so no notification
+    expect(mockEmitNotification).not.toHaveBeenCalled()
   })
 })
