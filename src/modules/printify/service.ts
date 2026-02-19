@@ -787,6 +787,20 @@ class PrintifyModuleService extends MedusaService({
     return order ? this.buildOrderBridge(order) : null
   }
 
+  async getOrderByMedusaIdForCustomer(
+    medusaOrderId: string,
+    email: string,
+  ): Promise<PrintifyOrderBridge | null> {
+    const order = await this.getOrderByMedusaId(medusaOrderId)
+    if (!order) return null
+    const storedEmail =
+      order.customerEmail ||
+      order.shippingAddress?.email ||
+      ""
+    if (storedEmail.toLowerCase() !== email.toLowerCase()) return null
+    return order
+  }
+
   async getOrderByPrintifyId(printifyOrderId: string): Promise<PrintifyOrderBridge | null> {
     const [order] = await this.listPrintifyOrders({
       filters: { printify_order_id: printifyOrderId },
