@@ -16,6 +16,7 @@ export interface PrintifyConfigurationData {
   auto_submit_orders?: boolean;
   max_order_retries?: number;
   retry_backoff_minutes?: number;
+  webhook_retention_days?: number;
 }
 
 const PrintifyConfiguration = model.define("PrintifyConfiguration", {
@@ -29,6 +30,7 @@ const PrintifyConfiguration = model.define("PrintifyConfiguration", {
   auto_submit_orders: model.boolean().default(false),
   max_order_retries: model.number().default(3), // DEFAULT_MAX_ORDER_RETRIES
   retry_backoff_minutes: model.number().default(5), // DEFAULT_RETRY_BACKOFF_MINUTES
+  webhook_retention_days: model.number().default(30),
 });
 
 export default PrintifyConfiguration;

@@ -148,6 +148,7 @@ export interface TestServiceContext {
     configurations: ReturnType<typeof createInMemoryStore>
     products: ReturnType<typeof createInMemoryStore>
     orders: ReturnType<typeof createInMemoryStore>
+    webhook_events: ReturnType<typeof createInMemoryStore>
   }
   mockContainer: {
     link: { create: jest.Mock; dismiss: jest.Mock }
@@ -165,8 +166,9 @@ export function createTestService(): TestServiceContext {
   const configurations = createInMemoryStore()
   const products = createInMemoryStore()
   const orders = createInMemoryStore()
+  const webhook_events = createInMemoryStore()
 
-  const storesObj = { configurations, products, orders }
+  const storesObj = { configurations, products, orders, webhook_events }
 
   const mockContainer = {
     link: { create: jest.fn(), dismiss: jest.fn() },
@@ -237,6 +239,20 @@ export function createTestService(): TestServiceContext {
     orders.update(updates)
   ;(service as any).deletePrintifyOrders = (ids: string[]) =>
     orders.delete(ids)
+
+  // Webhook Events
+  ;(service as any).createPrintifyWebhookEvents = (items: any[]) =>
+    webhook_events.create(items)
+  ;(service as any).retrievePrintifyWebhookEvent = (id: string) =>
+    webhook_events.retrieve(id)
+  ;(service as any).listPrintifyWebhookEvents = (opts: any) =>
+    webhook_events.list(opts)
+  ;(service as any).listAndCountPrintifyWebhookEvents = (opts: any) =>
+    webhook_events.listAndCount(opts)
+  ;(service as any).updatePrintifyWebhookEvents = (updates: any[]) =>
+    webhook_events.update(updates)
+  ;(service as any).deletePrintifyWebhookEvents = (ids: string[]) =>
+    webhook_events.delete(ids)
 
   // Wire container (service accesses it via this.__container__)
   const containerResolveMap: Record<string, any> = {

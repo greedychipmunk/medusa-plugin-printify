@@ -41,6 +41,7 @@ function buildMockService(overrides: Record<string, any> = {}) {
     listPrintifyProducts: jest.fn().mockResolvedValue([]),
     updatePrintifyProducts: jest.fn().mockResolvedValue([]),
     disableProduct: jest.fn().mockResolvedValue({}),
+    storeWebhookEvent: jest.fn().mockResolvedValue({}),
     ...overrides,
   }
 }

@@ -25,6 +25,49 @@ function verifySignature(
   )
 }
 
+/**
+ * Dispatches a webhook event to the appropriate handler.
+ * Exported so the replay route can reuse the same logic.
+ */
+export async function dispatchEvent(
+  service: PrintifyModuleService,
+  event: PrintifyWebhookEvent,
+  config: any,
+): Promise<void> {
+  switch (event.type) {
+    case "order:status-changed":
+      await handleOrderStatusChanged(service, event)
+      break
+
+    case "order:shipped":
+      await handleOrderShipped(service, event)
+      break
+
+    case "product:updated":
+      await handleProductUpdated(service, event, config)
+      break
+
+    case "product:deleted":
+      await handleProductDeleted(service, event)
+      break
+
+    case "order:sent-to-production":
+      await handleOrderSentToProduction(service, event)
+      break
+
+    case "order:shipment:delivered":
+      await handleOrderDelivered(service, event)
+      break
+
+    case "shop:disconnected":
+      handleShopDisconnected(event)
+      break
+
+    default:
+      webhookLogger.info("Unhandled webhook event type", { type: (event as any).type })
+  }
+}
+
 export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<void> {
   const printifyService: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
 
@@ -32,11 +75,12 @@ export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<voi
   const [config] = await printifyService.listPrintifyConfigurations({})
   const webhookSecret = config?.webhook_secret
 
+  // Extract raw body and signature before dispatch
+  const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body)
+  const signature = req.headers["x-printify-signature"] as string | undefined
+
   // Verify HMAC signature if a secret is configured
   if (webhookSecret) {
-    const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body)
-    const signature = req.headers["x-printify-signature"] as string | undefined
-
     if (!verifySignature(rawBody, signature, webhookSecret)) {
       webhookLogger.warn("Webhook signature verification failed")
       res.status(401).json({ error: "Invalid signature" })
@@ -53,42 +97,36 @@ export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<voi
 
   webhookLogger.info("Received webhook event", { type: event.type })
 
+  let processingStatus: "success" | "failed" = "success"
+  let processingError: string | null = null
+
   try {
-    switch (event.type) {
-      case "order:status-changed":
-        await handleOrderStatusChanged(printifyService, event)
-        break
-
-      case "order:shipped":
-        await handleOrderShipped(printifyService, event)
-        break
-
-      case "product:updated":
-        await handleProductUpdated(printifyService, event, config)
-        break
-
-      case "product:deleted":
-        await handleProductDeleted(printifyService, event)
-        break
-
-      case "order:sent-to-production":
-        await handleOrderSentToProduction(printifyService, event)
-        break
-
-      case "order:shipment:delivered":
-        await handleOrderDelivered(printifyService, event)
-        break
-
-      case "shop:disconnected":
-        handleShopDisconnected(event)
-        break
-
-      default:
-        webhookLogger.info("Unhandled webhook event type", { type: (event as any).type })
-    }
+    await dispatchEvent(printifyService, event, config)
   } catch (error) {
     webhookLogger.error("Error processing webhook event", error as Error)
+    processingStatus = "failed"
+    processingError = (error as Error).message
     // Still return 200 to acknowledge receipt and prevent retries
+  }
+
+  // Store the webhook event (fire-and-forget)
+  if (config?.id) {
+    printifyService
+      .storeWebhookEvent({
+        configuration_id: config.id,
+        event_type: event.type,
+        payload: event,
+        signature: signature ?? null,
+        processing_status: processingStatus,
+        processing_error: processingError,
+        received_at: new Date(),
+        processed_at: new Date(),
+      })
+      .catch((err: Error) => {
+        webhookLogger.warn("Failed to store webhook event (non-fatal)", {
+          error: err.message,
+        })
+      })
   }
 
   // Always return 200 to acknowledge receipt
