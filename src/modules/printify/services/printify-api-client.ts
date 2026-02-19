@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { RateLimiter, RateLimitState } from '../utils/rate-limiter';
 
 /**
  * Printify API Client
@@ -117,9 +118,11 @@ export interface PrintifyApiError {
 export class PrintifyApiClient {
   private client: AxiosInstance;
   private config: PrintifyApiConfig;
+  private rateLimiter: RateLimiter;
 
   constructor(config: PrintifyApiConfig) {
     this.config = config;
+    this.rateLimiter = new RateLimiter();
     this.client = this.createAxiosInstance();
   }
 
@@ -149,13 +152,31 @@ export class PrintifyApiClient {
       }
     );
 
-    // Response interceptor for error handling
+    // Response interceptor for rate limit tracking and error handling
     instance.interceptors.response.use(
       (response) => {
+        this.rateLimiter.updateFromHeaders(response.headers);
         this.config.logger?.debug?.(`Printify API Response: ${response.status} ${response.config.url}`);
         return response;
       },
       (error) => {
+        if (error.response?.status === 429) {
+          const config = error.config as InternalAxiosRequestConfig & { __retryCount?: number };
+          config.__retryCount = config.__retryCount || 0;
+
+          if (this.rateLimiter.shouldRetry(config.__retryCount)) {
+            config.__retryCount++;
+            const delay = this.rateLimiter.getRetryDelay(
+              config.__retryCount,
+              error.response.headers?.['retry-after'],
+            );
+            this.config.logger?.warn?.(`Rate limited (429). Retry ${config.__retryCount} in ${delay}ms`);
+            return new Promise((resolve) => setTimeout(resolve, delay))
+              .then(() => instance.request(config));
+          }
+          this.config.logger?.error?.(`Rate limit exceeded after ${config.__retryCount} retries`);
+        }
+
         const printifyError = this.handleApiError(error);
         this.config.logger?.error?.(`Printify API Error: ${JSON.stringify(printifyError)}`);
         return Promise.reject(printifyError);
@@ -279,18 +300,8 @@ export class PrintifyApiClient {
   /**
    * Get rate limit information from last response
    */
-  getRateLimitInfo(): {
-    limit?: number;
-    remaining?: number;
-    reset?: number;
-  } {
-    // Note: This would extract rate limit headers from the last response
-    // Printify API rate limiting details would need to be implemented
-    return {
-      limit: undefined,
-      remaining: undefined,
-      reset: undefined,
-    };
+  getRateLimitInfo(): RateLimitState {
+    return this.rateLimiter.getRateLimitInfo();
   }
 
   /**
