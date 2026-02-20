@@ -41,7 +41,19 @@ export class PrintifyOrderBridge {
   get tracking() { return this.entity.tracking; }
   get shippingMethod(): number | undefined { return this.entity.shippingMethod; }
   
+  // Cost tracking
+  get totalCost(): number { return this.entity.total_cost ?? this.entity.totalCost ?? 0; }
+  get costPerItem(): any[] { return this.entity.cost_per_item ?? this.entity.costPerItem ?? []; }
+  get profit(): number { return this.pricing.total - this.totalCost; }
+  get marginPercent(): number {
+    const total = this.pricing.total;
+    if (total <= 0) return 0;
+    return Math.round((this.profit / total) * 10000) / 100;
+  }
+
   // Direct access aliases for API routes
+  get total_cost() { return this.entity.total_cost ?? 0; }
+  get cost_per_item() { return this.entity.cost_per_item ?? null; }
   get line_items() { return this.entity.line_items || this.entity.items; }
   get error_details() { return this.entity.error_details; }
   get last_error_at() { return this.entity.last_error_at; }

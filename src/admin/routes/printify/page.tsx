@@ -22,6 +22,9 @@ interface OrderStats {
   cancelled_orders: number
   failed_orders: number
   total_value: number
+  total_cost: number
+  total_profit: number
+  avg_margin_percent: number
   currency: string
 }
 
@@ -311,6 +314,39 @@ const PrintifyDashboard = () => {
           </div>
         )}
       </Container>
+
+      {/* Profit Metrics */}
+      {stats && stats.total_cost > 0 && (
+        <Container className="mt-4">
+          <Header title="Profit Metrics" subtitle="Revenue, costs, and margins" />
+          <div className="grid grid-cols-2 gap-4 px-6 py-4 md:grid-cols-4">
+            <div className="rounded-lg border border-ui-border-base p-4">
+              <Text className="text-2xl font-bold">
+                ${((stats.total_value || 0) / 100).toFixed(2)}
+              </Text>
+              <Text size="small" className="text-ui-fg-subtle">Total Revenue</Text>
+            </div>
+            <div className="rounded-lg border border-ui-border-base p-4">
+              <Text className="text-2xl font-bold text-ui-tag-orange-text">
+                ${((stats.total_cost || 0) / 100).toFixed(2)}
+              </Text>
+              <Text size="small" className="text-ui-fg-subtle">Total Cost</Text>
+            </div>
+            <div className="rounded-lg border border-ui-border-base p-4">
+              <Text className={`text-2xl font-bold ${(stats.total_profit || 0) >= 0 ? "text-ui-tag-green-text" : "text-ui-tag-red-text"}`}>
+                ${((stats.total_profit || 0) / 100).toFixed(2)}
+              </Text>
+              <Text size="small" className="text-ui-fg-subtle">Total Profit</Text>
+            </div>
+            <div className="rounded-lg border border-ui-border-base p-4">
+              <Text className={`text-2xl font-bold ${(stats.avg_margin_percent || 0) >= 40 ? "text-ui-tag-green-text" : (stats.avg_margin_percent || 0) >= 20 ? "text-ui-tag-orange-text" : "text-ui-tag-red-text"}`}>
+                {(stats.avg_margin_percent || 0).toFixed(1)}%
+              </Text>
+              <Text size="small" className="text-ui-fg-subtle">Avg Margin</Text>
+            </div>
+          </div>
+        </Container>
+      )}
 
       {/* Recent Orders */}
       <Container className="mt-4">

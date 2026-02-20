@@ -35,6 +35,9 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
           cancelled_orders: stats.cancelled,
           failed_orders: stats.failed,
           total_value: stats.totalValue,
+          total_cost: stats.totalCost,
+          total_profit: stats.totalProfit,
+          avg_margin_percent: stats.avgMarginPercent,
           average_processing_time_hours: stats.averageProcessingTime,
           currency: stats.currency,
           date_range: {

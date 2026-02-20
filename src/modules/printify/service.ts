@@ -146,6 +146,9 @@ export interface OrderStats {
   failed: number
   averageProcessingTime: number
   totalValue: number
+  totalCost: number
+  totalProfit: number
+  avgMarginPercent: number
   currency: string
 }
 
@@ -662,6 +665,43 @@ class PrintifyModuleService extends MedusaService({
     return allProducts
   }
 
+  // ── Cost Tracking Helpers ───────────────────────────────────────
+
+  /**
+   * Looks up variant costs from locally-stored printify_data for each product.
+   * Returns Map<printifyProductId, Map<printifyVariantId, cost>>
+   */
+  async fetchVariantCosts(
+    cartItems: PrintifyCartItem[],
+  ): Promise<Map<string, Map<string, number>>> {
+    const costMap = new Map<string, Map<string, number>>()
+
+    const uniqueProductIds = new Set<string>()
+    for (const item of cartItems) {
+      const pid = (item as any).printifyProductId || (item as any).printify_product_id
+      if (pid) uniqueProductIds.add(pid)
+    }
+
+    for (const pid of uniqueProductIds) {
+      try {
+        const [product] = await this.listPrintifyProducts({
+          filters: { printify_product_id: pid },
+        })
+        if (product?.printify_data?.variants) {
+          const variantCosts = new Map<string, number>()
+          for (const v of (product.printify_data as any).variants) {
+            variantCosts.set(String(v.id), v.cost || 0)
+          }
+          costMap.set(pid, variantCosts)
+        }
+      } catch {
+        this.log.warn("Failed to look up variant costs for product", { printifyProductId: pid })
+      }
+    }
+
+    return costMap
+  }
+
   // ── Order Business Logic ────────────────────────────────────────
 
   async createOrderFromCart(request: CreateOrderRequest): Promise<PrintifyOrderBridge> {
@@ -687,6 +727,36 @@ class PrintifyModuleService extends MedusaService({
       configurationId = firstConfig?.id || "default"
     }
 
+    // Calculate production costs (immutable snapshot at order time)
+    let totalCost = 0
+    let costPerItem: any[] | null = null
+    try {
+      const costMap = await this.fetchVariantCosts(request.cartItems)
+      if (costMap.size > 0) {
+        costPerItem = []
+        for (const item of request.cartItems) {
+          const pid = (item as any).printifyProductId || (item as any).printify_product_id || ""
+          const vid = String((item as any).printifyVariantId || (item as any).printify_variant_id || "")
+          const qty = item.quantity || 1
+          const variantCosts = costMap.get(pid)
+          const unitCost = variantCosts?.get(vid) || 0
+          const itemTotalCost = unitCost * qty
+          totalCost += itemTotalCost
+          costPerItem.push({
+            printify_product_id: pid,
+            printify_variant_id: vid,
+            unit_cost: unitCost,
+            quantity: qty,
+            total_cost: itemTotalCost,
+          })
+        }
+      }
+    } catch (error) {
+      this.log.warn("Failed to calculate production costs (non-fatal)", {
+        error: (error as Error).message,
+      })
+    }
+
     // Persist order in database
     const results = await this.createPrintifyOrders([
       {
@@ -701,6 +771,8 @@ class PrintifyModuleService extends MedusaService({
         tax_amount: taxAmount,
         discount_amount: discountAmount,
         shipping_method: request.shippingMethod || DEFAULT_SHIPPING_METHOD,
+        total_cost: totalCost,
+        cost_per_item: costPerItem,
       },
     ] as any)
     const created = Array.isArray(results) ? results[0] : results
@@ -815,6 +887,8 @@ class PrintifyModuleService extends MedusaService({
       maxRetries: entity.maxRetries || DEFAULT_MAX_ORDER_RETRIES,
       error_details: entity.error_details ?? null,
       last_error_at: entity.last_error_at ?? null,
+      total_cost: entity.total_cost ?? 0,
+      cost_per_item: entity.cost_per_item ?? null,
     })
   }
 
@@ -966,6 +1040,9 @@ class PrintifyModuleService extends MedusaService({
       failed: 0,
       averageProcessingTime: 0,
       totalValue: 0,
+      totalCost: 0,
+      totalProfit: 0,
+      avgMarginPercent: 0,
       currency: "USD",
     }
 
@@ -1004,6 +1081,7 @@ class PrintifyModuleService extends MedusaService({
 
       if (!isFinal || order.status === PrintifyOrderStatus.DELIVERED) {
         stats.totalValue += order.total_price
+        stats.totalCost += (order as any).total_cost || 0
       }
 
       if (
@@ -1021,6 +1099,11 @@ class PrintifyModuleService extends MedusaService({
       stats.averageProcessingTime = Math.round(
         totalProcessingTime / processedOrdersCount,
       )
+    }
+
+    stats.totalProfit = stats.totalValue - stats.totalCost
+    if (stats.totalValue > 0 && stats.totalCost > 0) {
+      stats.avgMarginPercent = Math.round((stats.totalProfit / stats.totalValue) * 10000) / 100
     }
 
     return stats

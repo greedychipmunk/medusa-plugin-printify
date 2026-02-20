@@ -34,6 +34,8 @@ interface PrintifyOrder {
   status: string
   customer_email: string
   total_amount: number
+  total_cost: number
+  margin_percent: number
   currency: string
   created_at: string
   updated_at: string
@@ -324,6 +326,26 @@ const PrintifyOrdersPage = () => {
             ${(row.original.total_amount / 100).toFixed(2)} {row.original.currency}
           </Text>
         ),
+      }),
+      columnHelper.accessor("margin_percent", {
+        header: "Margin",
+        cell: ({ row }) => {
+          const margin = row.original.margin_percent
+          const cost = row.original.total_cost
+          if (!cost || cost === 0) {
+            return <Text size="small" className="text-ui-fg-muted">N/A</Text>
+          }
+          const colorClass = margin >= 40
+            ? "text-ui-tag-green-text"
+            : margin >= 20
+              ? "text-ui-tag-orange-text"
+              : "text-ui-tag-red-text"
+          return (
+            <Text size="small" className={colorClass}>
+              {margin.toFixed(1)}%
+            </Text>
+          )
+        },
       }),
       columnHelper.accessor("created_at", {
         header: "Created",
