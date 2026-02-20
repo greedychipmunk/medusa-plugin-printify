@@ -38,6 +38,8 @@ const PrintifyOrder = model.define("PrintifyOrder", {
   error_details: model.text().nullable(),
   retry_count: model.number().default(0),
   last_error_at: model.dateTime().nullable(),
+  total_cost: model.number().default(0),
+  cost_per_item: model.json().nullable(),
 });
 
 export default PrintifyOrder;

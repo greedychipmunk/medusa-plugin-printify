@@ -14,8 +14,8 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Product Management**: Sync Printify products with Medusa store, inventory management, bulk operations
 - **Order Processing**: Automatic order submission to Printify, real-time status sync, tracking management
 - **Shopping Cart Integration**: Add Printify products to cart, validation, custom options
-- **Admin Dashboard**: Configuration management, order interface, analytics
-- **Modern Architecture**: DML entities, TypeScript, comprehensive test coverage (169 tests)
+- **Admin Dashboard**: Configuration management, order interface, analytics, margin reporting
+- **Modern Architecture**: DML entities, TypeScript, comprehensive test coverage (545 tests)
 
 ## Architecture & Modernization Status
 
@@ -82,6 +82,16 @@ This is a comprehensive MedusaJS v2.11+ plugin that integrates with Printify for
 - **Admin UI**: Notification Settings panel with email input and 3 toggle switches
 - **Config API**: All CRUD endpoints expose notification fields via zod validation
 - **Test Coverage**: 507/507 tests across 49 suites (13 emitter + 4 config + 2 auto-submit + 2 sync + 2 webhook + 3 model tests added)
+
+### Phase 12 Complete: Order Cost Tracking
+- **Cost Fields**: `total_cost` (number, default 0) and `cost_per_item` (JSON, nullable) on PrintifyOrder model
+- **Immutable Cost Snapshot**: Production costs captured at order creation time from product `printify_data.variants[].cost`
+- **Service Layer**: `fetchVariantCosts()` helper, cost calculation in `createOrderFromCart`, cost aggregation in `getOrderStatsForConfig`
+- **Bridge Getters**: `totalCost`, `costPerItem`, `profit`, `marginPercent` on `PrintifyOrderBridge`
+- **API Endpoints**: Cost/margin fields exposed in order list, detail (inside pricing), and stats responses
+- **Admin UI**: Margin % column with color coding in order list, Cost & Margin section with per-item breakdown in order detail, Profit Metrics cards on dashboard
+- **Backward Compatible**: Legacy orders get `total_cost: 0`, `cost_per_item: null` — UI hides cost section gracefully
+- **Test Coverage**: 545/545 tests across 53 suites (10 model + 12 service + 8 endpoint + 8 integration tests added)
 
 ## Key Components
 
@@ -178,7 +188,7 @@ export class PrintifyOrderService {
 ## Testing Requirements
 
 ### Test Coverage
-- **507 tests total** across 49 test suites
+- **545 tests total** across 53 test suites
 - **100% success rate** required for any changes
 - **Critical path coverage** for all user-facing functionality
 - **DML model validation** with both entity and bridge patterns
@@ -196,7 +206,8 @@ tests/
 │   ├── webhook-handling.test.ts                 # 9 webhook integration tests
 │   ├── shipping-rates.test.ts                   # 6 shipping/cache tests
 │   ├── scheduled-jobs.test.ts                   # 14 sync job + auto-submit job tests
-│   └── bulk-order-lifecycle.test.ts             # 7 bulk order lifecycle tests
+│   ├── bulk-order-lifecycle.test.ts             # 7 bulk order lifecycle tests
+│   └── order-cost-lifecycle.test.ts             # 6 order cost lifecycle tests
 ├── unit/
 │   ├── api/
 │   │   ├── admin-endpoints.test.ts              # 28 API tests
@@ -205,19 +216,22 @@ tests/
 │   │   ├── webhook-endpoints.test.ts             # 16 webhook handler tests
 │   │   ├── webhook-admin-endpoints.test.ts      # 5 admin webhook tests
 │   │   ├── automation-endpoints.test.ts         # 6 automation API tests
-│   │   └── notification-config-endpoints.test.ts    # 4 notification config tests
+│   │   ├── notification-config-endpoints.test.ts    # 4 notification config tests
+│   │   └── order-cost-endpoints.test.ts             # 8 order cost endpoint tests
 │   ├── order-retry-endpoint.test.ts         # 4 retry endpoint tests
 │   └── bulk-order-endpoints.test.ts         # 15 bulk order endpoint tests
 │   ├── models/
 │   │   ├── printify-configuration-dml.test.ts   # 13 model tests
-│   │   └── printify-product-dml.test.ts         # 14 model tests
+│   │   ├── printify-product-dml.test.ts         # 14 model tests
+│   │   └── printify-order-dml.test.ts           # 10 order cost model tests
 │   ├── services/
 │   │   ├── printify-cart-service.test.ts            # 6 service tests
 │   │   ├── printify-link-service.test.ts            # 14 link/module tests
 │   │   ├── printify-order-service.test.ts           # 19 service tests
 │   │   ├── printify-api-client-webhooks.test.ts     # 5 API client webhook tests
 │   │   ├── printify-api-client-shipping.test.ts     # 4 API client shipping tests
-│   │   └── bulk-order-service.test.ts               # 9 bulk order service tests
+│   │   ├── bulk-order-service.test.ts               # 9 bulk order service tests
+│   │   └── printify-order-cost-service.test.ts      # 12 order cost service tests
 │   ├── jobs/
 │   │   ├── sync-products-job.test.ts                # 5 sync job tests
 │   │   ├── auto-submit-orders-job.test.ts           # 5 auto-submit job tests
@@ -410,7 +424,7 @@ Both jobs respect their config flags, skip when already running, and track activ
 # Development
 npm run build            # Compile TypeScript
 npm run watch           # Development with watch mode
-npm test               # Run test suite (507 tests)
+npm test               # Run test suite (545 tests)
 npm run lint           # ESLint validation
 npm run lint:fix       # Auto-fix linting issues
 
@@ -449,7 +463,7 @@ PRINTIFY_LOG_LEVEL=debug npm run dev
 When working with this plugin:
 
 1. **Always maintain modern import patterns** - use `@medusajs/framework` imports
-2. **Preserve test coverage** - all 507 tests must continue passing
+2. **Preserve test coverage** - all 545 tests must continue passing
 3. **Use DML entities** with bridge compatibility for any model changes
 4. **Follow TypeScript strict typing** - no `any` types in production code
 5. **Implement proper error handling** with retry logic for external APIs

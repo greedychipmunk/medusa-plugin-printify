@@ -23,6 +23,14 @@ interface OrderItem {
   options?: Record<string, unknown>
 }
 
+interface CostPerItem {
+  printify_product_id: string
+  printify_variant_id: string
+  unit_cost: number
+  quantity: number
+  total_cost: number
+}
+
 interface OrderPricing {
   subtotal: number
   shipping_cost: number
@@ -30,6 +38,10 @@ interface OrderPricing {
   discount_amount: number
   total: number
   currency: string
+  total_cost?: number
+  profit?: number
+  margin_percent?: number
+  cost_per_item?: CostPerItem[] | null
 }
 
 interface ShippingAddress {
@@ -304,6 +316,68 @@ const PrintifyOrderDetailPage = () => {
           </div>
         </div>
       </Container>
+
+      {/* Cost & Margin */}
+      {order.pricing.total_cost != null && order.pricing.total_cost > 0 && (
+        <Container className="mt-4">
+          <div className="px-6 py-4">
+            <Heading level="h3" className="mb-3">Cost & Margin</Heading>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              <div>
+                <Text size="small" className="text-ui-fg-subtle">Production Cost</Text>
+                <Text weight="plus">{formatCurrency(order.pricing.total_cost, order.pricing.currency)}</Text>
+              </div>
+              <div>
+                <Text size="small" className="text-ui-fg-subtle">Profit</Text>
+                <Text weight="plus" className={
+                  (order.pricing.profit ?? 0) >= 0 ? "text-ui-tag-green-text" : "text-ui-tag-red-text"
+                }>
+                  {formatCurrency(order.pricing.profit ?? 0, order.pricing.currency)}
+                </Text>
+              </div>
+              <div>
+                <Text size="small" className="text-ui-fg-subtle">Margin</Text>
+                <Text weight="plus" className={
+                  (order.pricing.margin_percent ?? 0) >= 40
+                    ? "text-ui-tag-green-text"
+                    : (order.pricing.margin_percent ?? 0) >= 20
+                      ? "text-ui-tag-orange-text"
+                      : "text-ui-tag-red-text"
+                }>
+                  {(order.pricing.margin_percent ?? 0).toFixed(1)}%
+                </Text>
+              </div>
+            </div>
+            {order.pricing.cost_per_item && order.pricing.cost_per_item.length > 0 && (
+              <div className="mt-4 overflow-x-auto">
+                <Text size="small" weight="plus" className="mb-2">Per-Item Costs</Text>
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-ui-border-base">
+                      <th className="py-2 font-medium text-ui-fg-subtle">Product</th>
+                      <th className="py-2 font-medium text-ui-fg-subtle">Variant</th>
+                      <th className="py-2 font-medium text-ui-fg-subtle">Unit Cost</th>
+                      <th className="py-2 font-medium text-ui-fg-subtle">Qty</th>
+                      <th className="py-2 font-medium text-ui-fg-subtle">Total Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {order.pricing.cost_per_item.map((item, index) => (
+                      <tr key={index} className="border-b border-ui-border-base">
+                        <td className="py-2"><Text size="small">{item.printify_product_id}</Text></td>
+                        <td className="py-2"><Text size="small">{item.printify_variant_id}</Text></td>
+                        <td className="py-2"><Text size="small">{formatCurrency(item.unit_cost, order.pricing.currency)}</Text></td>
+                        <td className="py-2"><Text size="small">{item.quantity}</Text></td>
+                        <td className="py-2"><Text size="small">{formatCurrency(item.total_cost, order.pricing.currency)}</Text></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </Container>
+      )}
 
       {/* Line Items */}
       <Container className="mt-4">
