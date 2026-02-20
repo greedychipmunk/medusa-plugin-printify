@@ -155,7 +155,7 @@ export class PrintifyApiClient {
     // Response interceptor for rate limit tracking and error handling
     instance.interceptors.response.use(
       (response) => {
-        this.rateLimiter.updateFromHeaders(response.headers);
+        this.rateLimiter.updateFromHeaders(response.headers as Record<string, string>);
         this.config.logger?.debug?.(`Printify API Response: ${response.status} ${response.config.url}`);
         return response;
       },
