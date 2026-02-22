@@ -59,6 +59,7 @@
     "react-dom": "^18.0.0"
   },
   "dependencies": {
+    "@trendtri/medusa-plugin-printify": "file:.yalc/@trendtri/medusa-plugin-printify",
     "axios": "^1.6.0",
     "zod": "^3.22.0"
   },
