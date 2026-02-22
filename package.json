@@ -6,13 +6,13 @@
   "types": "dist/index.d.ts",
   "exports": {
     "./package.json": "./package.json",
+    "./workflows": "./dist/workflows/index.js",
+    "./modules/*": "./dist/modules/*/index.js",
     "./admin": {
-      "types": "./dist/admin/index.d.ts",
       "import": "./dist/admin/index.js",
       "require": "./dist/admin/index.js",
       "default": "./dist/admin/index.js"
     },
-    "./modules/*": "./dist/modules/*/index.js",
     "./*": "./dist/*.js"
   },
   "scripts": {
