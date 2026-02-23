@@ -451,6 +451,126 @@ npm start
 PRINTIFY_LOG_LEVEL=debug npm run dev
 ```
 
+### # "Uncaught TypeError: Cannot read properties of undefined (reading 'widgetModule')" from medusajs with custom plugin
+
+This error usually means Medusa’s admin is trying to load your plugin’s admin export, but the plugin isn’t exporting a `widgetModule` object in the shape Medusa expects, or it’s not being resolved correctly at all.
+
+Here are the most common causes and fixes:
+
+#### 1. Ensure correct admin export shape
+
+In your plugin’s admin entry (for example `src/admin/index.ts`), you need to export something like:
+
+```ts
+import { defineWidgets } from "@medusajs/admin";
+
+export const widgetModule = defineWidgets([
+  {
+    key: "my-widget",
+    label: "My widget",
+    // region where the widget will appear
+    // e.g. "product.details.after" or similar, depending on your use case
+    position: "product.details.after",
+    component: () => import("./widgets/my-widget"),
+  },
+]);
+```
+
+If you export the widget directly, or use a different name (e.g. `widgets` instead of `widgetModule`), `plugin.widgetModule` will be `undefined` and you get exactly the error you’re seeing.[^7]
+
+Double‑check:
+
+- File path matches what you configured as the admin entry in `package.json`.
+- You are exporting `widgetModule` (named export), not default.
+- `defineWidgets` (or the correct helper for your Medusa version) is used, not a plain object.
+
+
+#### 2. Verify `package.json` of the plugin
+
+Your plugin’s `package.json` should clearly point to the admin entry:
+
+```json
+{
+  "name": "medusa-plugin-my-plugin",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    },
+    "./admin": {
+      "require": "./dist/admin/index.js",
+      "import": "./dist/admin/index.mjs"
+    }
+  },
+  "medusa": {
+    "admin": "dist/admin/index.mjs"
+  }
+}
+```
+
+Key points:
+
+- There is an `./admin` export.
+- The paths actually exist after you build (`dist/admin/index.*`).
+- The `medusa.admin` field (for newer setups) or whatever your version’s docs specify points to the right file.
+
+If Medusa resolves the plugin but can’t find the `admin` export, the `widgetModule` will be missing.
+
+#### 3. Check build/TS config
+
+If you’re using TypeScript, ensure:
+
+- `module` is set to something compatible like `ESNext` rather than `NodeNext` if you see odd ESM/CJS problems.
+- Your build actually emits the `admin` folder and the `widgetModule` export.
+- No path aliases are breaking the built output.
+
+A quick check is to open the built `dist/admin/index.js` and verify it really exports `widgetModule`.
+
+#### 4. Confirm Medusa app config
+
+In the Medusa project where you install the plugin, the plugin entry in `medusa-config.js/ts` should just be:
+
+```js
+const plugins = [
+  // ...
+  {
+    resolve: "medusa-plugin-my-plugin",
+    options: { /* ... */ },
+  },
+];
+```
+
+You should not manually point to admin files from here; Medusa infers them from the plugin’s package exports.
+
+If the dashboard fails only when the plugin is installed, but works otherwise, that’s a strong sign the admin export is malformed or missing.
+
+#### 5. If imports inside the widget break it
+
+Sometimes adding certain imports to your widget (like `dayjs`, `@emotion/react`, etc.) causes the plugin’s admin module to fail to load, which in turn makes `widgetModule` effectively undefined.
+
+Workarounds that have helped others:
+
+- Add problematic deps to `optimizeDeps.include` in `medusa-config`:
+
+```js
+const { defineConfig } = require("medusa-config");
+
+module.exports = defineConfig({
+  admin: {
+    vite: () => ({
+      optimizeDeps: {
+        include: ["@emotion/react", "dayjs"], // as needed
+      },
+    }),
+  },
+  projectConfig: { /* ... */ },
+});
+```
+
+- Ensure you’re importing from ESM‑friendly entry points of those libraries.
+
 ## Version Compatibility
 
 | Plugin Version | MedusaJS Version | Status |

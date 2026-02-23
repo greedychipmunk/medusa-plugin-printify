@@ -75,4 +75,4 @@ const plugin = {
   i18nModule,
 }
 
-export default plugin
+export = plugin
