@@ -27,7 +27,10 @@ jest.mock("@medusajs/framework/utils", () => ({
     })),
     boolean: jest.fn(() => ({ default: jest.fn().mockReturnThis() })),
     json: jest.fn(() => ({ nullable: jest.fn().mockReturnThis() })),
-    number: jest.fn(() => ({ nullable: jest.fn().mockReturnThis() })),
+    number: jest.fn(() => ({
+      nullable: jest.fn().mockReturnThis(),
+      default: jest.fn().mockReturnThis(),
+    })),
     dateTime: jest.fn(() => ({ nullable: jest.fn().mockReturnThis() })),
   },
 }))

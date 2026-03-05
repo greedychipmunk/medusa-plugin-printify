@@ -19,7 +19,7 @@ class PrintifyModuleService extends MedusaService({
     container: InjectedDependencies,
     moduleOptions: { options: PrintifyModuleOptions }
   ) {
-    super(...arguments)
+    super(container, moduleOptions)
     this.options = moduleOptions.options
     this.apiClient = new PrintifyApiClient(moduleOptions.options.apiKey)
   }
