@@ -18,7 +18,10 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const { webhookSecret } = service.getOptions()
 
   const signature = req.headers["x-pfy-signature"] as string
-  const rawBody = JSON.stringify(req.body)
+  // Prefer the raw body captured by the bodyParser middleware (preserveRawBody: true)
+  // to ensure HMAC verification uses the exact bytes Printify signed.
+  // Fall back to re-serialized JSON only if rawBody was not captured.
+  const rawBody = (req.rawBody as string | undefined) ?? JSON.stringify(req.body)
 
   if (!verifyPrintifySignature(rawBody, signature ?? "", webhookSecret)) {
     return res.status(401).json({ error: "Invalid signature" })
