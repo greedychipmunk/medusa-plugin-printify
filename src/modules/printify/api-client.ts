@@ -100,6 +100,16 @@ export class PrintifyApiClient {
         "Content-Type": "application/json",
       },
     })
+
+    this.client.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        const status = (error.response?.status as number) ?? 0
+        const detail = error.response?.data
+        const message = `Printify API error ${status}: ${JSON.stringify(detail)}`
+        return Promise.reject(new Error(message))
+      }
+    )
   }
 
   async getShops(): Promise<PrintifyShop[]> {
