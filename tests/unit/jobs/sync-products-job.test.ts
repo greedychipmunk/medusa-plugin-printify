@@ -39,7 +39,7 @@ describe("sync-products-job", () => {
   })
 
   it("exports correct cron schedule", async () => {
-    const { config } = await import("../../../src/jobs/sync-products-job")
+    const { config } = await import("../../../src/jobs/sync-products-job.js")
     expect(config.schedule).toBe("0 * * * *")
     expect(config.name).toBe("printify-sync-products")
   })

@@ -52,7 +52,7 @@ describe("auto-submit-orders-job", () => {
   })
 
   it("exports correct cron schedule", async () => {
-    const { config } = await import("../../../src/jobs/auto-submit-orders-job")
+    const { config } = await import("../../../src/jobs/auto-submit-orders-job.js")
     expect(config.schedule).toBe("*/5 * * * *")
     expect(config.name).toBe("printify-auto-submit-orders")
   })
