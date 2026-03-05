@@ -1,3 +1,4 @@
+import { PrintifyApiClient } from "../../../src/modules/printify/api-client"
 import { PrintifyModuleService } from "../../../src/modules/printify/service"
 import { PrintifyModuleOptions } from "../../../src/modules/printify/types"
 
@@ -33,13 +34,7 @@ function createInMemoryStore() {
     )
   }
 
-  function remove(table: string, selector: AnyRecord): void {
-    stores[table] = stores[table].filter(
-      (item) => !Object.entries(selector).every(([k, v]) => item[k] === v)
-    )
-  }
-
-  return { stores, list, create, update, remove }
+  return { stores, list, create, update }
 }
 
 export function createTestService(options: Partial<PrintifyModuleOptions> = {}) {
@@ -51,27 +46,50 @@ export function createTestService(options: Partial<PrintifyModuleOptions> = {}) 
     ...options,
   }
 
-  // Mock MedusaService base to inject in-memory store operations
-  jest.mock("@medusajs/framework/utils", () => {
-    const actual = jest.requireActual("@medusajs/framework/utils")
-    return {
-      ...actual,
-      MedusaService: jest.fn(() =>
-        class MockBase {
-          listPrintifyShops = jest.fn((f?: AnyRecord) => Promise.resolve(store.list("printify_shop", f)))
-          createPrintifyShops = jest.fn((d: AnyRecord[]) => Promise.resolve(store.create("printify_shop", d)))
-          updatePrintifyShops = jest.fn((sel: AnyRecord, d: AnyRecord) => Promise.resolve(store.update("printify_shop", sel, d)))
-          listPrintifyProducts = jest.fn((f?: AnyRecord) => Promise.resolve(store.list("printify_product", f)))
-          createPrintifyProducts = jest.fn((d: AnyRecord[]) => Promise.resolve(store.create("printify_product", d)))
-          updatePrintifyProducts = jest.fn((sel: AnyRecord, d: AnyRecord) => Promise.resolve(store.update("printify_product", sel, d)))
-          listPrintifyOrders = jest.fn((f?: AnyRecord) => Promise.resolve(store.list("printify_order", f)))
-          createPrintifyOrders = jest.fn((d: AnyRecord[]) => Promise.resolve(store.create("printify_order", d)))
-          updatePrintifyOrders = jest.fn((sel: AnyRecord, d: AnyRecord) => Promise.resolve(store.update("printify_order", sel, d)))
-        }
-      ),
-    }
+  // Bypass the MedusaService constructor by creating an instance directly from
+  // the prototype. This lets us inject in-memory store methods while keeping
+  // all real business logic (getApiClient, getOptions, etc.) from the prototype.
+  const service = Object.create(PrintifyModuleService.prototype) as PrintifyModuleService
+
+  // Use unknown cast first to satisfy TypeScript when assigning private fields
+  // and read-only generated methods via index access on the raw object.
+  const svc = service as unknown as AnyRecord
+
+  // Set private fields that the constructor normally assigns
+  svc["options"] = defaultOptions
+  svc["apiClient"] = new PrintifyApiClient(defaultOptions.apiKey)
+
+  // Inject in-memory CRUD methods (replacing what MedusaService would generate)
+  svc["listPrintifyShops"] = jest.fn((f?: AnyRecord) =>
+    Promise.resolve(store.list("printify_shop", f ?? {}))
+  )
+  svc["createPrintifyShops"] = jest.fn((d: AnyRecord[]) =>
+    Promise.resolve(store.create("printify_shop", d))
+  )
+  svc["updatePrintifyShops"] = jest.fn((sel: AnyRecord, d: AnyRecord) => {
+    store.update("printify_shop", sel, d)
+    return Promise.resolve()
+  })
+  svc["listPrintifyProducts"] = jest.fn((f?: AnyRecord) =>
+    Promise.resolve(store.list("printify_product", f ?? {}))
+  )
+  svc["createPrintifyProducts"] = jest.fn((d: AnyRecord[]) =>
+    Promise.resolve(store.create("printify_product", d))
+  )
+  svc["updatePrintifyProducts"] = jest.fn((sel: AnyRecord, d: AnyRecord) => {
+    store.update("printify_product", sel, d)
+    return Promise.resolve()
+  })
+  svc["listPrintifyOrders"] = jest.fn((f?: AnyRecord) =>
+    Promise.resolve(store.list("printify_order", f ?? {}))
+  )
+  svc["createPrintifyOrders"] = jest.fn((d: AnyRecord[]) =>
+    Promise.resolve(store.create("printify_order", d))
+  )
+  svc["updatePrintifyOrders"] = jest.fn((sel: AnyRecord, d: AnyRecord) => {
+    store.update("printify_order", sel, d)
+    return Promise.resolve()
   })
 
-  const service = new PrintifyModuleService({} as never, { options: defaultOptions })
   return { service, store: store.stores, options: defaultOptions }
 }
