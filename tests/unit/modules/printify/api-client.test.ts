@@ -8,12 +8,10 @@ jest.mock("axios", () => ({
 
 let mockGet: jest.Mock
 let mockPost: jest.Mock
-let mockPut: jest.Mock
 let mockDelete: jest.Mock
 let mockAxiosInstance: {
   get: jest.Mock
   post: jest.Mock
-  put: jest.Mock
   delete: jest.Mock
   interceptors: { response: { use: jest.Mock } }
 }
@@ -21,7 +19,6 @@ let mockAxiosInstance: {
 beforeEach(() => {
   mockGet = jest.fn()
   mockPost = jest.fn()
-  mockPut = jest.fn()
   mockDelete = jest.fn()
 
   let capturedErrorHandler: ((error: unknown) => Promise<unknown>) | undefined
@@ -40,11 +37,6 @@ beforeEach(() => {
     ),
     post: jest.fn((...args: unknown[]) =>
       mockPost(...args).catch((err: unknown) =>
-        capturedErrorHandler ? capturedErrorHandler(err) : Promise.reject(err)
-      )
-    ),
-    put: jest.fn((...args: unknown[]) =>
-      mockPut(...args).catch((err: unknown) =>
         capturedErrorHandler ? capturedErrorHandler(err) : Promise.reject(err)
       )
     ),
@@ -105,7 +97,7 @@ describe("PrintifyApiClient", () => {
     mockGet.mockResolvedValue({ data: { id: "p1", title: "Test" } })
     const result = await client.getProduct("shop1", "p1")
     expect(mockGet).toHaveBeenCalledWith("/shops/shop1/products/p1.json")
-    expect(result.id).toBe("p1")
+    expect(result).toEqual({ id: "p1", title: "Test" })
   })
 
   it("createOrder posts payload to correct endpoint", async () => {
@@ -125,7 +117,7 @@ describe("PrintifyApiClient", () => {
     mockPost.mockResolvedValue({ data: { id: "po1", status: "pending" } })
     const result = await client.createOrder("shop1", payload)
     expect(mockPost).toHaveBeenCalledWith("/shops/shop1/orders.json", payload)
-    expect(result.id).toBe("po1")
+    expect(result).toEqual({ id: "po1", status: "pending" })
   })
 
   it("submitOrder posts to send_to_production endpoint", async () => {
@@ -159,7 +151,8 @@ describe("PrintifyApiClient", () => {
   it("deleteWebhook calls delete endpoint", async () => {
     const client = new PrintifyApiClient("key")
     mockDelete.mockResolvedValue({ data: {} })
-    await client.deleteWebhook("shop1", "wh1")
+    const result = await client.deleteWebhook("shop1", "wh1")
     expect(mockDelete).toHaveBeenCalledWith("/shops/shop1/webhooks/wh1.json")
+    expect(result).toBeUndefined()
   })
 })
