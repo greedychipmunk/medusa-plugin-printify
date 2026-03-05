@@ -16,9 +16,12 @@ const PrintifyPage = () => {
 
   const syncShops = async () => {
     setSyncing(true)
-    await fetch("/admin/printify/shops", { method: "POST", credentials: "include" })
-    await loadShops()
-    setSyncing(false)
+    try {
+      await fetch("/admin/printify/shops", { method: "POST", credentials: "include" })
+      await loadShops()
+    } finally {
+      setSyncing(false)
+    }
   }
 
   useEffect(() => { loadShops() }, [])
