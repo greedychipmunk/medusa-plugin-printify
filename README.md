@@ -111,7 +111,7 @@ pnpm install
 Copy the environment template and fill in your values:
 
 ```bash
-cp .env.example .env
+cp .env.template .env
 ```
 
 Start the local PostgreSQL instance:
@@ -251,9 +251,3 @@ The plugin adds two pages and one widget to the Medusa Admin:
 - **Printify** (sidebar) — lists synced shops with a one-click sync button
 - **Printify › Products** — browse all synced products with search and a sync button
 - **Order detail widget** — appears below the order details on any order page, showing the linked Printify order status and a manual submit button for pending orders
-
----
-
-## License
-
-MIT

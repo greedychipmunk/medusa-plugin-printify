@@ -71,8 +71,8 @@
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "npm@10.9.0",
   "dependencies": {
     "axios": "^1.13.6"
-  }
+  },
+  "packageManager": "pnpm@10.18.3+sha1.0202a20aaa3d7ba8bc29b50d95efe1a34dd95773"
 }
