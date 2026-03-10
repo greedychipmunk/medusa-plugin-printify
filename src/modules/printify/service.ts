@@ -17,11 +17,21 @@ class PrintifyModuleService extends MedusaService({
 
   constructor(
     container: InjectedDependencies,
-    moduleOptions: { options: PrintifyModuleOptions }
+    moduleOptions: { options: PrintifyModuleOptions } | PrintifyModuleOptions
   ) {
     super(container, moduleOptions)
-    this.options = moduleOptions.options
-    this.apiClient = new PrintifyApiClient(moduleOptions.options.apiKey)
+    const options =
+      "options" in moduleOptions && moduleOptions.options != null
+        ? moduleOptions.options
+        : (moduleOptions as PrintifyModuleOptions)
+    if (!options?.apiKey) {
+      throw new Error(
+        "[medusa-plugin-printify] Missing required option: apiKey. " +
+          "Ensure the plugin is configured with { apiKey, webhookSecret } in your medusa-config."
+      )
+    }
+    this.options = options
+    this.apiClient = new PrintifyApiClient(options.apiKey)
   }
 
   getApiClient(): PrintifyApiClient {
