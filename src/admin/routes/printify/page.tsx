@@ -1,4 +1,5 @@
 import { defineRouteConfig } from "@medusajs/admin-sdk"
+import { BuildingStorefront } from "@medusajs/icons"
 import { Container, Heading, Button, Table, Badge } from "@medusajs/ui"
 import { useEffect, useState } from "react"
 
@@ -59,7 +60,7 @@ const PrintifyPage = () => {
 
 export const config = defineRouteConfig({
   label: "Printify",
-  icon: () => null,
+  icon: BuildingStorefront,
 })
 
 export default PrintifyPage
