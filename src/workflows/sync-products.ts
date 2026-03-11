@@ -57,7 +57,10 @@ const upsertProductsStep = createStep(
         printify_data: product as unknown as Record<string, unknown>,
       }
       if (existing.length > 0) {
-        await service.updatePrintifyProducts({ printify_id: String(product.id) }, data)
+        await service.updatePrintifyProducts({
+          selector: { printify_id: String(product.id) },
+          data,
+        })
       } else {
         await service.createPrintifyProducts([data])
       }

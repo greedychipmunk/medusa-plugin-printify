@@ -66,8 +66,8 @@ export function createTestService(options: Partial<PrintifyModuleOptions> = {}) 
   svc["createPrintifyShops"] = jest.fn((d: AnyRecord[]) =>
     Promise.resolve(store.create("printify_shop", d))
   )
-  svc["updatePrintifyShops"] = jest.fn((sel: AnyRecord, d: AnyRecord) => {
-    store.update("printify_shop", sel, d)
+  svc["updatePrintifyShops"] = jest.fn(({ selector, data }: { selector: AnyRecord; data: AnyRecord }) => {
+    store.update("printify_shop", selector, data)
     return Promise.resolve()
   })
   svc["listPrintifyProducts"] = jest.fn((f?: AnyRecord) =>
@@ -76,8 +76,8 @@ export function createTestService(options: Partial<PrintifyModuleOptions> = {}) 
   svc["createPrintifyProducts"] = jest.fn((d: AnyRecord[]) =>
     Promise.resolve(store.create("printify_product", d))
   )
-  svc["updatePrintifyProducts"] = jest.fn((sel: AnyRecord, d: AnyRecord) => {
-    store.update("printify_product", sel, d)
+  svc["updatePrintifyProducts"] = jest.fn(({ selector, data }: { selector: AnyRecord; data: AnyRecord }) => {
+    store.update("printify_product", selector, data)
     return Promise.resolve()
   })
   svc["listPrintifyOrders"] = jest.fn((f?: AnyRecord) =>
@@ -86,8 +86,8 @@ export function createTestService(options: Partial<PrintifyModuleOptions> = {}) 
   svc["createPrintifyOrders"] = jest.fn((d: AnyRecord[]) =>
     Promise.resolve(store.create("printify_order", d))
   )
-  svc["updatePrintifyOrders"] = jest.fn((sel: AnyRecord, d: AnyRecord) => {
-    store.update("printify_order", sel, d)
+  svc["updatePrintifyOrders"] = jest.fn(({ selector, data }: { selector: AnyRecord; data: AnyRecord }) => {
+    store.update("printify_order", selector, data)
     return Promise.resolve()
   })
 
