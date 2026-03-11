@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from "axios"
 
 export type PrintifyShop = {
-  id: string
+  id: number
   title: string
   sales_channel?: string
 }
@@ -117,7 +117,7 @@ export class PrintifyApiClient {
     return data
   }
 
-  async getProducts(shopId: string, page = 1, limit = 100): Promise<{ data: PrintifyProduct[]; current_page: number; last_page: number }> {
+  async getProducts(shopId: string, page = 1, limit = 50): Promise<{ data: PrintifyProduct[]; current_page: number; last_page: number }> {
     const { data } = await this.client.get(`/shops/${shopId}/products.json`, {
       params: { page, limit },
     })

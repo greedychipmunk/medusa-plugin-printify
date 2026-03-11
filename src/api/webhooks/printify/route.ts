@@ -62,7 +62,7 @@ async function handleOrderEvent(
   body: PrintifyWebhookBody,
   service: PrintifyModuleService
 ) {
-  const printifyOrderId = body.resource.id
+  const printifyOrderId = String(body.resource.id)
   const status =
     (body.resource.data?.status as string) ??
     body.type.split(":").pop() ??
@@ -80,7 +80,7 @@ async function handleProductEvent(
 ) {
   if (body.type === "product:deleted") {
     await service.updatePrintifyProducts(
-      { printify_id: body.resource.id },
+      { printify_id: String(body.resource.id) },
       { is_published: false }
     )
   }
@@ -93,7 +93,7 @@ async function handleShopDisconnected(
 ) {
   console.warn(`[printify] webhook: shop disconnected: ${body.shop_id}`)
   await service.updatePrintifyShops(
-    { printify_id: body.shop_id },
+    { printify_id: String(body.shop_id) },
     { sales_channel_id: null }
   )
 }

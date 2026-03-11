@@ -107,7 +107,7 @@ const persistLocalOrderStep = createStep(
 
     for (const item of input.lineItems) {
       const products = await service.listPrintifyProducts({
-        printify_id: item.printify_product_id,
+        printify_id: String(item.printify_product_id),
       })
       if (products.length > 0) {
         const product = products[0]
@@ -122,7 +122,7 @@ const persistLocalOrderStep = createStep(
 
     const created = await service.createPrintifyOrders([
       {
-        printify_id: printifyOrder.id,
+        printify_id: String(printifyOrder.id),
         shop_id: input.shopId,
         medusa_order_id: input.medusaOrderId,
         status: printifyOrder.status || "pending",
