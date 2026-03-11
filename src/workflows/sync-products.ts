@@ -23,7 +23,7 @@ const fetchAllProductsStep = createStep(
     let lastPage = 1
 
     do {
-      const response = await client.getProducts(shopId, page, 100)
+      const response = await client.getProducts(shopId, page, 50)
       products.push(...response.data)
       lastPage = response.last_page
       page++
@@ -45,9 +45,9 @@ const upsertProductsStep = createStep(
     const service: PrintifyModuleService = container.resolve(PRINTIFY_MODULE)
 
     for (const product of products) {
-      const existing = await service.listPrintifyProducts({ printify_id: product.id })
+      const existing = await service.listPrintifyProducts({ printify_id: String(product.id) })
       const data = {
-        printify_id: product.id,
+        printify_id: String(product.id),
         shop_id: shopId,
         title: product.title,
         description: product.description,
@@ -57,7 +57,7 @@ const upsertProductsStep = createStep(
         printify_data: product as unknown as Record<string, unknown>,
       }
       if (existing.length > 0) {
-        await service.updatePrintifyProducts({ printify_id: product.id }, data)
+        await service.updatePrintifyProducts({ printify_id: String(product.id) }, data)
       } else {
         await service.createPrintifyProducts([data])
       }

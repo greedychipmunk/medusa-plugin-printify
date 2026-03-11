@@ -29,14 +29,15 @@ const upsertShopsStep = createStep(
     const service: PrintifyModuleService = container.resolve(PRINTIFY_MODULE)
 
     for (const shop of shops) {
-      const existing = await service.listPrintifyShops({ printify_id: shop.id })
+      const printifyId = String(shop.id)
+      const existing = await service.listPrintifyShops({ printify_id: printifyId })
       if (existing.length > 0) {
         await service.updatePrintifyShops(
-          { printify_id: shop.id },
+          { printify_id: printifyId },
           { title: shop.title }
         )
       } else {
-        await service.createPrintifyShops([{ printify_id: shop.id, title: shop.title }])
+        await service.createPrintifyShops([{ printify_id: printifyId, title: shop.title }])
       }
     }
 
