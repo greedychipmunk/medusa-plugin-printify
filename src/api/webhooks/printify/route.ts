@@ -70,7 +70,7 @@ async function handleOrderEvent(
 
   const orders = await service.listPrintifyOrders({ printify_id: printifyOrderId })
   if (orders.length > 0) {
-    await service.updatePrintifyOrders({ printify_id: printifyOrderId }, { status })
+    await service.updatePrintifyOrders({ selector: { printify_id: printifyOrderId }, data: { status } })
   }
 }
 
@@ -79,10 +79,10 @@ async function handleProductEvent(
   service: PrintifyModuleService
 ) {
   if (body.type === "product:deleted") {
-    await service.updatePrintifyProducts(
-      { printify_id: String(body.resource.id) },
-      { is_published: false }
-    )
+    await service.updatePrintifyProducts({
+      selector: { printify_id: String(body.resource.id) },
+      data: { is_published: false },
+    })
   }
   console.log(`[printify] webhook: product event: ${body.type} for ${body.resource.id}`)
 }
@@ -92,8 +92,8 @@ async function handleShopDisconnected(
   service: PrintifyModuleService
 ) {
   console.warn(`[printify] webhook: shop disconnected: ${body.shop_id}`)
-  await service.updatePrintifyShops(
-    { printify_id: String(body.shop_id) },
-    { sales_channel_id: null }
-  )
+  await service.updatePrintifyShops({
+    selector: { printify_id: String(body.shop_id) },
+    data: { sales_channel_id: null },
+  })
 }
