@@ -55,6 +55,7 @@ const upsertProductsStep = createStep(
         images: product.images as unknown as Record<string, unknown>,
         print_areas: product.print_areas as unknown as Record<string, unknown>,
         printify_data: product as unknown as Record<string, unknown>,
+        is_published: !product.is_locked,
       }
       if (existing.length > 0) {
         await service.updatePrintifyProducts({
