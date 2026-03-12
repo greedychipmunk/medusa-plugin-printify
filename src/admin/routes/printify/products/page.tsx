@@ -1,21 +1,32 @@
-import { Container, Heading, Button, Table, Badge, Input } from "@medusajs/ui"
+import { Container, Heading, Button, Table, Badge, Input, Text } from "@medusajs/ui"
+import { ArrowLeft } from "@medusajs/icons"
 import { useState, useEffect } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
 
+type PrintifyImage = { src: string; position: string; is_default: boolean }
 type PrintifyProduct = {
   id: string
   printify_id: string
   title: string
   is_published: boolean
   variants: { id: number; title: string; cost: number }[]
+  images: PrintifyImage[]
 }
 
 const PrintifyProductsPage = () => {
   const [products, setProducts] = useState<PrintifyProduct[]>([])
   const [syncing, setSyncing] = useState(false)
   const [search, setSearch] = useState("")
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+
+  const shopId = searchParams.get("shop_id")
+  const shopName = searchParams.get("shop_name") ?? shopId ?? "All Shops"
 
   const loadProducts = async () => {
-    const res = await fetch("/admin/printify/products", { credentials: "include" })
+    const params = new URLSearchParams()
+    if (shopId) params.set("shop_id", shopId)
+    const res = await fetch(`/admin/printify/products?${params}`, { credentials: "include" })
     const json = await res.json()
     setProducts(json.products ?? [])
   }
@@ -23,23 +34,46 @@ const PrintifyProductsPage = () => {
   const syncProducts = async () => {
     setSyncing(true)
     try {
-      await fetch("/admin/printify/products", { method: "POST", credentials: "include" })
+      await fetch("/admin/printify/products", {
+        method: "POST",
+        credentials: "include",
+      })
       await loadProducts()
     } finally {
       setSyncing(false)
     }
   }
 
-  useEffect(() => { loadProducts() }, [])
+  useEffect(() => { loadProducts() }, [shopId])
 
   const filtered = products.filter(p =>
     p.title.toLowerCase().includes(search.toLowerCase())
   )
 
+  const getThumb = (images: PrintifyImage[]) => {
+    const img = images?.find(i => i.is_default) ?? images?.[0]
+    return img?.src ?? null
+  }
+
   return (
     <Container className="p-8">
+      <div className="mb-4">
+        <button
+          onClick={() => navigate("/printify")}
+          className="flex items-center gap-1 text-ui-fg-muted hover:text-ui-fg-base text-sm"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Shops
+        </button>
+      </div>
+
       <div className="flex justify-between items-center mb-6">
-        <Heading>Printify Products</Heading>
+        <div>
+          <Heading>{shopName}</Heading>
+          <Text size="small" className="text-ui-fg-muted">
+            {products.length} product{products.length !== 1 ? "s" : ""}
+          </Text>
+        </div>
         <Button onClick={syncProducts} isLoading={syncing} size="small">
           Sync Products
         </Button>
@@ -55,6 +89,7 @@ const PrintifyProductsPage = () => {
       <Table>
         <Table.Header>
           <Table.Row>
+            <Table.HeaderCell className="w-12"></Table.HeaderCell>
             <Table.HeaderCell>Title</Table.HeaderCell>
             <Table.HeaderCell>Variants</Table.HeaderCell>
             <Table.HeaderCell>Status</Table.HeaderCell>
@@ -62,7 +97,22 @@ const PrintifyProductsPage = () => {
         </Table.Header>
         <Table.Body>
           {filtered.map(product => (
-            <Table.Row key={product.id}>
+            <Table.Row
+              key={product.id}
+              className="cursor-pointer hover:bg-ui-bg-base-hover"
+              onClick={() => navigate(`/printify/products/${product.id}`)}
+            >
+              <Table.Cell>
+                {getThumb(product.images) ? (
+                  <img
+                    src={getThumb(product.images)!}
+                    alt=""
+                    className="w-10 h-10 rounded object-cover"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded bg-ui-bg-subtle" />
+                )}
+              </Table.Cell>
               <Table.Cell>{product.title}</Table.Cell>
               <Table.Cell>{product.variants?.length ?? 0} variants</Table.Cell>
               <Table.Cell>
