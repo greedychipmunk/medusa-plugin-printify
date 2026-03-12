@@ -1,11 +1,13 @@
 import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { BuildingStorefront } from "@medusajs/icons"
+import { ArrowRight, BuildingStorefront } from "@medusajs/icons"
 import { Container, Heading, Button, Table, Badge } from "@medusajs/ui"
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
 
 type PrintifyShop = { id: string; printify_id: string; title: string }
 
 const PrintifyPage = () => {
+  const navigate = useNavigate()
   const [shops, setShops] = useState<PrintifyShop[]>([])
   const [syncing, setSyncing] = useState(false)
 
@@ -41,14 +43,22 @@ const PrintifyPage = () => {
           <Table.Row>
             <Table.HeaderCell>Shop Name</Table.HeaderCell>
             <Table.HeaderCell>Printify ID</Table.HeaderCell>
+            <Table.HeaderCell></Table.HeaderCell>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {shops.map(shop => (
-            <Table.Row key={shop.id}>
+            <Table.Row
+              key={shop.id}
+              className="cursor-pointer hover:bg-ui-bg-base-hover"
+              onClick={() => navigate(`/printify/products?shop_id=${shop.printify_id}&shop_name=${encodeURIComponent(shop.title)}`)}
+            >
               <Table.Cell>{shop.title}</Table.Cell>
               <Table.Cell>
                 <Badge color="grey" size="2xsmall">{shop.printify_id}</Badge>
+              </Table.Cell>
+              <Table.Cell>
+                <ArrowRight />
               </Table.Cell>
             </Table.Row>
           ))}
