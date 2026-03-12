@@ -44,7 +44,7 @@ describe("GET /admin/printify/products/[id]", () => {
     const res = { json: jest.fn(), status: jest.fn().mockReturnThis() }
 
     const { GET } = await import(
-      "../../../src/api/admin/printify/products/[id]/route"
+      "../../../src/api/admin/printify/products/[id]/route.js"
     )
     await GET(req as any, res as any)
 
@@ -76,7 +76,7 @@ describe("GET /admin/printify/products/[id]", () => {
     const res = { json: jest.fn(), status: jest.fn().mockReturnThis() }
 
     const { GET } = await import(
-      "../../../src/api/admin/printify/products/[id]/route"
+      "../../../src/api/admin/printify/products/[id]/route.js"
     )
     await GET(req as any, res as any)
 
@@ -102,7 +102,7 @@ describe("GET /admin/printify/products/[id]", () => {
     const res = { json: jest.fn(), status: jest.fn().mockReturnThis() }
 
     const { GET } = await import(
-      "../../../src/api/admin/printify/products/[id]/route"
+      "../../../src/api/admin/printify/products/[id]/route.js"
     )
     await GET(req as any, res as any)
 
