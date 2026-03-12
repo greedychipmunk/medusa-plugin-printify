@@ -1,7 +1,7 @@
 import { Container, Heading, Button, Table, Badge, Input, Text } from "@medusajs/ui"
 import { ArrowLeft } from "@medusajs/icons"
 import { useState, useEffect } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 
 type PrintifyImage = { src: string; position: string; is_default: boolean }
 type PrintifyProduct = {
@@ -18,8 +18,6 @@ const PrintifyProductsPage = () => {
   const [syncing, setSyncing] = useState(false)
   const [search, setSearch] = useState("")
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
-
   const shopId = searchParams.get("shop_id")
   const shopName = searchParams.get("shop_name") ?? shopId ?? "All Shops"
 
@@ -58,13 +56,13 @@ const PrintifyProductsPage = () => {
   return (
     <Container className="p-8">
       <div className="mb-4">
-        <button
-          onClick={() => navigate("/printify")}
-          className="flex items-center gap-1 text-ui-fg-muted hover:text-ui-fg-base text-sm"
+        <Link
+          to="/printify"
+          className="flex items-center gap-1 text-ui-fg-muted hover:text-ui-fg-base text-sm no-underline"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Shops
-        </button>
+        </Link>
       </div>
 
       <div className="flex justify-between items-center mb-6">
@@ -97,28 +95,36 @@ const PrintifyProductsPage = () => {
         </Table.Header>
         <Table.Body>
           {filtered.map(product => (
-            <Table.Row
-              key={product.id}
-              className="cursor-pointer hover:bg-ui-bg-base-hover"
-              onClick={() => navigate(`/printify/products/${product.id}`)}
-            >
+            <Table.Row key={product.id}>
               <Table.Cell>
-                {getThumb(product.images) ? (
-                  <img
-                    src={getThumb(product.images)!}
-                    alt=""
-                    className="w-10 h-10 rounded object-cover"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded bg-ui-bg-subtle" />
-                )}
+                <Link to={`/printify/products/${product.id}`} className="block">
+                  {getThumb(product.images) ? (
+                    <img
+                      src={getThumb(product.images)!}
+                      alt=""
+                      className="w-10 h-10 rounded object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded bg-ui-bg-subtle" />
+                  )}
+                </Link>
               </Table.Cell>
-              <Table.Cell>{product.title}</Table.Cell>
-              <Table.Cell>{product.variants?.length ?? 0} variants</Table.Cell>
               <Table.Cell>
-                <Badge color={product.is_published ? "green" : "grey"} size="2xsmall">
-                  {product.is_published ? "Published" : "Draft"}
-                </Badge>
+                <Link to={`/printify/products/${product.id}`} className="block text-inherit no-underline">
+                  {product.title}
+                </Link>
+              </Table.Cell>
+              <Table.Cell>
+                <Link to={`/printify/products/${product.id}`} className="block text-inherit no-underline">
+                  {product.variants?.length ?? 0} variants
+                </Link>
+              </Table.Cell>
+              <Table.Cell>
+                <Link to={`/printify/products/${product.id}`} className="block no-underline">
+                  <Badge color={product.is_published ? "green" : "grey"} size="2xsmall">
+                    {product.is_published ? "Published" : "Draft"}
+                  </Badge>
+                </Link>
               </Table.Cell>
             </Table.Row>
           ))}

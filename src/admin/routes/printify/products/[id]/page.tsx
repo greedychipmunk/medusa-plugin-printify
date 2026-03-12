@@ -1,7 +1,7 @@
 import { Container, Heading, Text, Badge, Table } from "@medusajs/ui"
 import { ArrowLeft, ArrowUpRightOnBox } from "@medusajs/icons"
 import { useState, useEffect } from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, Link } from "react-router-dom"
 
 type PrintifyVariant = {
   id: number
@@ -35,7 +35,6 @@ const formatCents = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
 const PrintifyProductDetailPage = () => {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const [product, setProduct] = useState<PrintifyProductDetail | null>(null)
   const [medusaProductId, setMedusaProductId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -74,13 +73,13 @@ const PrintifyProductDetailPage = () => {
   return (
     <div className="flex flex-col gap-4 p-8">
       {/* Back nav */}
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-1 text-ui-fg-muted hover:text-ui-fg-base text-sm w-fit"
+      <Link
+        to="/printify/products"
+        className="flex items-center gap-1 text-ui-fg-muted hover:text-ui-fg-base text-sm w-fit no-underline"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Products
-      </button>
+      </Link>
 
       {/* Header */}
       <Container className="p-6">
@@ -167,13 +166,13 @@ const PrintifyProductDetailPage = () => {
       <Container className="p-6">
         <Heading level="h2" className="mb-4">Medusa Product</Heading>
         {medusaProductId ? (
-          <button
-            onClick={() => navigate(`/products/${medusaProductId}`)}
-            className="flex items-center gap-2 text-ui-fg-interactive hover:text-ui-fg-interactive-hover text-sm"
+          <Link
+            to={`/products/${medusaProductId}`}
+            className="flex items-center gap-2 text-ui-fg-interactive hover:text-ui-fg-interactive-hover text-sm no-underline"
           >
             View linked product
             <ArrowUpRightOnBox className="w-4 h-4" />
-          </button>
+          </Link>
         ) : (
           <Text className="text-ui-fg-muted">No linked Medusa product</Text>
         )}
