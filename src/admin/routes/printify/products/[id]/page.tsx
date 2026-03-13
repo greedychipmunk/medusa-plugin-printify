@@ -1,4 +1,4 @@
-import { Container, Heading, Text, Badge, Table } from "@medusajs/ui"
+import { Container, Heading, Text, Badge, Table, Switch, Label } from "@medusajs/ui"
 import { ArrowLeft, ArrowUpRightOnBox } from "@medusajs/icons"
 import { useState, useEffect } from "react"
 import { useParams, Link } from "react-router-dom"
@@ -39,6 +39,8 @@ const PrintifyProductDetailPage = () => {
   const [medusaProductId, setMedusaProductId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [rawOpen, setRawOpen] = useState(false)
+  const [isPublished, setIsPublished] = useState(false)
+  const [toggling, setToggling] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -46,6 +48,7 @@ const PrintifyProductDetailPage = () => {
         const res = await fetch(`/admin/printify/products/${id}`, { credentials: "include" })
         const json = await res.json()
         setProduct(json.product)
+        setIsPublished(json.product.is_published)
         setMedusaProductId(json.medusa_product_id ?? null)
       } finally {
         setLoading(false)
@@ -53,6 +56,24 @@ const PrintifyProductDetailPage = () => {
     }
     load()
   }, [id])
+
+  const toggleVisibility = async () => {
+    setToggling(true)
+    const newValue = !isPublished
+    try {
+      const res = await fetch(`/admin/printify/products/${id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_published: newValue }),
+      })
+      if (res.ok) {
+        setIsPublished(newValue)
+      }
+    } finally {
+      setToggling(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -90,9 +111,20 @@ const PrintifyProductDetailPage = () => {
               Printify ID: {product.printify_id}
             </Text>
           </div>
-          <Badge color={product.is_published ? "green" : "grey"} size="small">
-            {product.is_published ? "Published" : "Draft"}
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge color={isPublished ? "green" : "grey"} size="small">
+              {isPublished ? "Published" : "Draft"}
+            </Badge>
+            <Switch
+              id="visibility-toggle"
+              checked={isPublished}
+              onCheckedChange={toggleVisibility}
+              disabled={toggling}
+            />
+            <Label htmlFor="visibility-toggle" className="text-ui-fg-muted text-sm cursor-pointer">
+              {isPublished ? "Visible on storefront" : "Hidden from storefront"}
+            </Label>
+          </div>
         </div>
         {product.description && (
           <Text className="mt-3">{product.description}</Text>
