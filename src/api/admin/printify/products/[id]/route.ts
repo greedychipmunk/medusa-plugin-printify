@@ -1,9 +1,8 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import { IProductModuleService } from "@medusajs/types"
 import { PRINTIFY_MODULE } from "../../../../../modules/printify"
 import PrintifyModuleService from "../../../../../modules/printify/service"
-
-type MedusaProductService = { updateProducts: (updates: { id: string; status: string }[]) => Promise<unknown> }
 
 // GET /admin/printify/products/:id — get a single product with Medusa link
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -64,10 +63,8 @@ export async function PATCH(req: MedusaRequest, res: MedusaResponse) {
 
     if (data.length > 0 && data[0].product?.id) {
       const medusaProductId: string = data[0].product.id
-      const productModuleService: MedusaProductService = req.scope.resolve("product")
-      await productModuleService.updateProducts([
-        { id: medusaProductId, status: is_published ? "published" : "draft" },
-      ])
+      const productModuleService = req.scope.resolve<IProductModuleService>("product")
+      await productModuleService.updateProducts(medusaProductId, { status: is_published ? "published" : "draft" })
     }
   } catch {
     // Link module not configured or Medusa product update failed — continue
