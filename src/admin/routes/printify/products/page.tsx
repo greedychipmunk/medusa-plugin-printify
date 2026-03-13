@@ -1,4 +1,4 @@
-import { Container, Heading, Button, Table, Badge, Input, Text } from "@medusajs/ui"
+import { Container, Heading, Button, Table, Badge, Input, Text, Switch } from "@medusajs/ui"
 import { ArrowLeft } from "@medusajs/icons"
 import { useState, useEffect } from "react"
 import { Link, useSearchParams } from "react-router-dom"
@@ -39,6 +39,26 @@ const PrintifyProductsPage = () => {
       await loadProducts()
     } finally {
       setSyncing(false)
+    }
+  }
+
+  const toggleVisibility = async (product: PrintifyProduct) => {
+    const newValue = !product.is_published
+    setProducts(prev =>
+      prev.map(p => p.id === product.id ? { ...p, is_published: newValue } : p)
+    )
+    try {
+      const res = await fetch(`/admin/printify/products/${product.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_published: newValue }),
+      })
+      if (!res.ok) throw new Error("Request failed")
+    } catch {
+      setProducts(prev =>
+        prev.map(p => p.id === product.id ? { ...p, is_published: product.is_published } : p)
+      )
     }
   }
 
@@ -91,6 +111,7 @@ const PrintifyProductsPage = () => {
             <Table.HeaderCell>Title</Table.HeaderCell>
             <Table.HeaderCell>Variants</Table.HeaderCell>
             <Table.HeaderCell>Status</Table.HeaderCell>
+            <Table.HeaderCell>Visible on Store</Table.HeaderCell>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -125,6 +146,12 @@ const PrintifyProductsPage = () => {
                     {product.is_published ? "Published" : "Draft"}
                   </Badge>
                 </Link>
+              </Table.Cell>
+              <Table.Cell onClick={e => e.stopPropagation()}>
+                <Switch
+                  checked={product.is_published}
+                  onCheckedChange={() => toggleVisibility(product)}
+                />
               </Table.Cell>
             </Table.Row>
           ))}
