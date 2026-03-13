@@ -62,7 +62,8 @@ export async function PATCH(req: MedusaRequest, res: MedusaResponse) {
 
     if (data.length > 0 && data[0].product?.id) {
       const medusaProductId: string = data[0].product.id
-      const productModuleService = req.scope.resolve<{ updateProducts: (updates: { id: string; status: string }[]) => Promise<unknown> }>("product")
+      type MedusaProductService = { updateProducts: (updates: { id: string; status: string }[]) => Promise<unknown> }
+      const productModuleService: MedusaProductService = req.scope.resolve("product")
       await productModuleService.updateProducts([
         { id: medusaProductId, status: is_published ? "published" : "draft" },
       ])
