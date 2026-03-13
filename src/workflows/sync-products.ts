@@ -47,10 +47,11 @@ const upsertProductsStep = createStep(
     for (const product of products) {
       const existing = await service.listPrintifyProducts({ printify_id: String(product.id) })
       const printifyPublished = !product.is_locked
+      // visibility_override is null until an admin manually sets it;
+      // MikroORM returns null (never undefined) for nullable boolean columns
       const shouldUpdateVisibility =
         existing.length === 0 ||
-        existing[0].visibility_override === null ||
-        existing[0].visibility_override === undefined
+        existing[0].visibility_override === null
 
       const data = {
         printify_id: String(product.id),
