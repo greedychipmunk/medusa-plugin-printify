@@ -38,10 +38,20 @@ export async function PATCH(req: MedusaRequest, res: MedusaResponse) {
   const service: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
 
-  const [product] = await service.updatePrintifyProducts({
-    selector: { id: req.params.id },
-    data: { is_published, visibility_override: is_published },
-  })
+  let product: any
+  try {
+    const [updated] = await service.updatePrintifyProducts({
+      selector: { id: req.params.id },
+      // Set visibility_override to a boolean to mark this as an admin-set value (non-null = do not sync-overwrite)
+      data: { is_published, visibility_override: is_published },
+    })
+    if (!updated) {
+      return res.status(404).json({ error: "Product not found" })
+    }
+    product = updated
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to update product" })
+  }
 
   try {
     const { data } = await query.graph({
@@ -52,7 +62,7 @@ export async function PATCH(req: MedusaRequest, res: MedusaResponse) {
 
     if (data.length > 0 && data[0].product?.id) {
       const medusaProductId: string = data[0].product.id
-      const productModuleService = req.scope.resolve("product")
+      const productModuleService = req.scope.resolve<{ updateProducts: (updates: { id: string; status: string }[]) => Promise<unknown> }>("product")
       await productModuleService.updateProducts([
         { id: medusaProductId, status: is_published ? "published" : "draft" },
       ])
