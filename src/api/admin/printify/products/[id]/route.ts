@@ -26,3 +26,40 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
 
   res.json({ product, medusa_product_id })
 }
+
+// PATCH /admin/printify/products/:id — toggle product visibility
+export async function PATCH(req: MedusaRequest, res: MedusaResponse) {
+  const { is_published } = req.body as { is_published: unknown }
+
+  if (typeof is_published !== "boolean") {
+    return res.status(400).json({ message: "is_published must be a boolean" })
+  }
+
+  const service: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
+  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+
+  const [product] = await service.updatePrintifyProducts({
+    selector: { id: req.params.id },
+    data: { is_published, visibility_override: is_published },
+  })
+
+  try {
+    const { data } = await query.graph({
+      entity: "printify_product",
+      fields: ["product.id"],
+      filters: { id: product.id },
+    })
+
+    if (data.length > 0 && data[0].product?.id) {
+      const medusaProductId: string = data[0].product.id
+      const productModuleService = req.scope.resolve("product")
+      await productModuleService.updateProducts([
+        { id: medusaProductId, status: is_published ? "published" : "draft" },
+      ])
+    }
+  } catch {
+    // Link module not configured or Medusa product update failed — continue
+  }
+
+  res.json({ product })
+}
