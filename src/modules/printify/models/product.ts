@@ -10,6 +10,7 @@ const PrintifyProduct = model.define("printify_product", {
   images: model.json(),
   print_areas: model.json(),
   is_published: model.boolean().default(false),
+  visibility_override: model.boolean().nullable(),
   printify_data: model.json().nullable(),
 })
 

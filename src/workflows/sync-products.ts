@@ -46,6 +46,12 @@ const upsertProductsStep = createStep(
 
     for (const product of products) {
       const existing = await service.listPrintifyProducts({ printify_id: String(product.id) })
+      const printifyPublished = !product.is_locked
+      const shouldUpdateVisibility =
+        existing.length === 0 ||
+        existing[0].visibility_override === null ||
+        existing[0].visibility_override === undefined
+
       const data = {
         printify_id: String(product.id),
         shop_id: shopId,
@@ -55,7 +61,7 @@ const upsertProductsStep = createStep(
         images: product.images as unknown as Record<string, unknown>,
         print_areas: product.print_areas as unknown as Record<string, unknown>,
         printify_data: product as unknown as Record<string, unknown>,
-        is_published: !product.is_locked,
+        ...(shouldUpdateVisibility ? { is_published: printifyPublished } : {}),
       }
       if (existing.length > 0) {
         await service.updatePrintifyProducts({
