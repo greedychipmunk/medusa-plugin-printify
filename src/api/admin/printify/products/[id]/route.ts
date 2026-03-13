@@ -28,7 +28,18 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   res.json({ product, medusa_product_id })
 }
 
-// PATCH /admin/printify/products/:id — toggle product visibility
+/**
+ * PATCH /admin/printify/products/:id
+ *
+ * Toggles storefront visibility for a Printify product. Setting `is_published`
+ * also sets `visibility_override` to a non-null value, which prevents the sync
+ * job from overwriting this value in the future.
+ *
+ * NOTE: Once visibility is manually toggled, there is intentionally no UI path
+ * to reset back to "follow Printify" (visibility_override = null). To restore
+ * automatic sync behaviour, update `visibility_override` to null directly in
+ * the database or via a future admin action.
+ */
 export async function PATCH(req: MedusaRequest, res: MedusaResponse) {
   const { is_published } = req.body as { is_published: unknown }
 
@@ -39,17 +50,25 @@ export async function PATCH(req: MedusaRequest, res: MedusaResponse) {
   const service: PrintifyModuleService = req.scope.resolve(PRINTIFY_MODULE)
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
 
+  // Verify the product exists first
+  let existingProduct: any
+  try {
+    existingProduct = await service.retrievePrintifyProduct(req.params.id)
+  } catch {
+    return res.status(404).json({ error: "Product not found" })
+  }
+
+  // Now update (product is known to exist)
   let product: any
   try {
-    const [updated] = await service.updatePrintifyProducts({
+    ;[product] = await service.updatePrintifyProducts({
       selector: { id: req.params.id },
-      // Set visibility_override to a boolean to mark this as an admin-set value (non-null = do not sync-overwrite)
-      data: { is_published, visibility_override: is_published },
+      data: {
+        is_published,
+        // Set visibility_override to a boolean to mark this as an admin-set value (non-null = do not sync-overwrite)
+        visibility_override: is_published,
+      },
     })
-    if (!updated) {
-      return res.status(404).json({ error: "Product not found" })
-    }
-    product = updated
   } catch (err) {
     return res.status(500).json({ error: "Failed to update product" })
   }
