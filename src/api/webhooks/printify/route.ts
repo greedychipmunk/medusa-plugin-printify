@@ -102,8 +102,8 @@ async function handleProductEvent(
         await productModuleService.updateProducts(data[0].product.id, { status: "draft" as any })
         console.log(`[printify] webhook: drafted Medusa product ${data[0].product.id} after Printify deletion`)
       }
-    } catch {
-      // Link not found or update failed — staging record is already unpublished
+    } catch (err) {
+      console.warn(`[printify] webhook: failed to draft Medusa product for printify_id ${printifyId}: ${err}`)
     }
 
     console.log(`[printify] webhook: product deleted: ${body.resource.id}`)
