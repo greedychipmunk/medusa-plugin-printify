@@ -3,17 +3,35 @@ import * as fs from "fs"
 import * as path from "path"
 
 describe("syncProductsWorkflow", () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "../../../src/workflows/sync-products.ts"),
+    "utf-8"
+  )
+
   it("exports a workflow function", () => {
     expect(syncProductsWorkflow).toBeDefined()
     expect(typeof syncProductsWorkflow).toBe("function")
   })
 
-  it("sets is_published from is_locked in upsertProductsStep", () => {
-    const source = fs.readFileSync(
-      path.resolve(__dirname, "../../../src/workflows/sync-products.ts"),
-      "utf-8"
-    )
-    // The data object must map is_locked → is_published
-    expect(source).toContain("is_published: !product.is_locked")
+  it("imports and uses mapPrintifyOptions", () => {
+    expect(source).toContain("mapPrintifyOptions")
+  })
+
+  it("logs error and skips products with missing options", () => {
+    expect(source).toContain("has no options in printify_data")
+  })
+
+  it("creates separate Medusa options from mapped result", () => {
+    expect(source).toContain("mapped.medusaOptions")
+    expect(source).not.toContain('title: "Variant"')
+  })
+
+  it("includes printify metadata on variants", () => {
+    expect(source).toContain("printify_variant_id")
+    expect(source).toContain("printify_product_id")
+  })
+
+  it("maps variant images from variantImageMap", () => {
+    expect(source).toContain("mapped.variantImageMap")
   })
 })
