@@ -34,4 +34,12 @@ describe("syncProductsWorkflow", () => {
   it("maps variant images from variantImageMap", () => {
     expect(source).toContain("mapped.variantImageMap")
   })
+
+  it("updates existing products with new options and variants on re-sync", () => {
+    expect(source).toContain("updateProducts")
+    // The update path should include options and variants
+    const updateSection = source.substring(source.indexOf("updateProducts"))
+    expect(updateSection).toContain("options:")
+    expect(updateSection).toContain("variants:")
+  })
 })

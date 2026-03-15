@@ -221,13 +221,49 @@ const createMedusaProductsStep = createStep(
           logger.error(`[printify] Failed to create Medusa product for "${pp.title}": ${err}`)
         }
       } else {
-        // Update existing linked Medusa product status
+        // Update existing linked Medusa product
         try {
+          const variants = (pp.variants as unknown as PrintifyVariant[]) ?? []
+          const enabledVariants = variants.filter((v) => v.is_enabled)
+
+          const printifyData = pp.printify_data as unknown as { options?: PrintifyOption[] } | null
+          const printifyOptions = (printifyData?.options as PrintifyOption[]) ?? []
+          const printifyImages = (pp.images as unknown as PrintifyImage[]) ?? []
+
+          const mapped = mapPrintifyOptions(printifyOptions, variants, printifyImages)
+          if (!mapped) {
+            logger.error(`[printify] Product "${pp.title}" (${pp.printify_id}) has no options in printify_data — skipping update`)
+            continue
+          }
+
           const targetStatus = pp.is_published ? "published" : "draft"
+
           await productModuleService.updateProducts(medusaProductId, {
+            title: pp.title,
+            description: pp.description || undefined,
             status: targetStatus as any,
+            images: printifyImages.map((img) => ({ url: img.src })),
+            options: mapped.medusaOptions,
+            variants: enabledVariants.map((v) => ({
+              title: v.title,
+              sku: v.sku || undefined,
+              options: mapped.variantOptionMap.get(v.id) ?? {},
+              prices: [
+                {
+                  amount: v.price,
+                  currency_code: "usd",
+                },
+              ],
+              manage_inventory: false,
+              metadata: {
+                printify_variant_id: v.id,
+                printify_product_id: pp.printify_id,
+              },
+              images: mapped.variantImageMap.get(v.id) ?? [],
+            })),
           })
           updated++
+          logger.info(`[printify] Updated Medusa product "${pp.title}" (${medusaProductId})`)
         } catch (err) {
           logger.error(`[printify] Failed to update Medusa product ${medusaProductId}: ${err}`)
         }
