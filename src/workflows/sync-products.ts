@@ -89,9 +89,43 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, "")
 }
 
+function buildMedusaVariants(
+  enabledVariants: PrintifyVariant[],
+  mapped: NonNullable<ReturnType<typeof mapPrintifyOptions>>,
+  printifyProductId: string
+) {
+  return enabledVariants.map((v) => ({
+    title: v.title,
+    sku: v.sku || undefined,
+    options: mapped.variantOptionMap.get(v.id) ?? {},
+    prices: [
+      {
+        amount: v.price,
+        currency_code: "usd",
+      },
+    ],
+    manage_inventory: false,
+    metadata: {
+      printify_variant_id: v.id,
+      printify_product_id: printifyProductId,
+    },
+    images: mapped.variantImageMap.get(v.id) ?? [],
+  }))
+}
+
+function extractPrintifyMappings(pp: { printify_data: unknown; variants: unknown; images: unknown }) {
+  const printifyData = pp.printify_data as unknown as { options?: PrintifyOption[] } | null
+  const printifyOptions = (printifyData?.options as PrintifyOption[]) ?? []
+  const variants = (pp.variants as unknown as PrintifyVariant[]) ?? []
+  const printifyImages = (pp.images as unknown as PrintifyImage[]) ?? []
+  const enabledVariants = variants.filter((v) => v.is_enabled)
+  const mapped = mapPrintifyOptions(printifyOptions, variants, printifyImages)
+  return { variants, enabledVariants, printifyImages, mapped }
+}
+
 const createMedusaProductsStep = createStep(
   "printify-create-medusa-products-step",
-  async ({ shopId }: { shopId: string }, { container }) => {
+  async ({ shopId, _upsertDone }: { shopId: string; _upsertDone?: unknown }, { container }) => {
     const service: PrintifyModuleService = container.resolve(PRINTIFY_MODULE)
     const query = container.resolve(ContainerRegistrationKeys.QUERY)
     const link = container.resolve(ContainerRegistrationKeys.LINK)
@@ -151,27 +185,20 @@ const createMedusaProductsStep = createStep(
         // Link query failed — treat as no link
       }
 
+      const { enabledVariants, printifyImages, mapped } = extractPrintifyMappings(pp)
+
+      if (enabledVariants.length === 0) {
+        logger.warn(`[printify] Product "${pp.title}" has no enabled variants — skipping`)
+        continue
+      }
+
+      if (!mapped) {
+        logger.error(`[printify] Product "${pp.title}" (${pp.printify_id}) has no options in printify_data — skipping`)
+        continue
+      }
+
       if (!medusaProductId) {
         // Create a new Medusa product
-        const variants = (pp.variants as unknown as PrintifyVariant[]) ?? []
-        const enabledVariants = variants.filter((v) => v.is_enabled)
-
-        if (enabledVariants.length === 0) {
-          logger.warn(`[printify] Product "${pp.title}" has no enabled variants — skipping`)
-          continue
-        }
-
-        // Extract structured options from printify_data
-        const printifyData = pp.printify_data as unknown as { options?: PrintifyOption[] } | null
-        const printifyOptions = (printifyData?.options as PrintifyOption[]) ?? []
-        const printifyImages = (pp.images as unknown as PrintifyImage[]) ?? []
-
-        const mapped = mapPrintifyOptions(printifyOptions, variants, printifyImages)
-        if (!mapped) {
-          logger.error(`[printify] Product "${pp.title}" (${pp.printify_id}) has no options in printify_data — skipping`)
-          continue
-        }
-
         try {
           const { result } = await createProductsWorkflow(container).run({
             input: {
@@ -183,23 +210,7 @@ const createMedusaProductsStep = createStep(
                   status: "published" as const,
                   images: printifyImages.map((img) => ({ url: img.src })),
                   options: mapped.medusaOptions,
-                  variants: enabledVariants.map((v) => ({
-                    title: v.title,
-                    sku: v.sku || undefined,
-                    options: mapped.variantOptionMap.get(v.id) ?? {},
-                    prices: [
-                      {
-                        amount: v.price,
-                        currency_code: "usd",
-                      },
-                    ],
-                    manage_inventory: false,
-                    metadata: {
-                      printify_variant_id: v.id,
-                      printify_product_id: pp.printify_id,
-                    },
-                    images: mapped.variantImageMap.get(v.id) ?? [],
-                  })),
+                  variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id),
                   sales_channels: [{ id: salesChannelId }],
                   shipping_profile_id: shippingProfileId,
                 },
@@ -223,19 +234,6 @@ const createMedusaProductsStep = createStep(
       } else {
         // Update existing linked Medusa product
         try {
-          const variants = (pp.variants as unknown as PrintifyVariant[]) ?? []
-          const enabledVariants = variants.filter((v) => v.is_enabled)
-
-          const printifyData = pp.printify_data as unknown as { options?: PrintifyOption[] } | null
-          const printifyOptions = (printifyData?.options as PrintifyOption[]) ?? []
-          const printifyImages = (pp.images as unknown as PrintifyImage[]) ?? []
-
-          const mapped = mapPrintifyOptions(printifyOptions, variants, printifyImages)
-          if (!mapped) {
-            logger.error(`[printify] Product "${pp.title}" (${pp.printify_id}) has no options in printify_data — skipping update`)
-            continue
-          }
-
           const targetStatus = pp.is_published ? "published" : "draft"
 
           await productModuleService.updateProducts(medusaProductId, {
@@ -244,23 +242,7 @@ const createMedusaProductsStep = createStep(
             status: targetStatus as any,
             images: printifyImages.map((img) => ({ url: img.src })),
             options: mapped.medusaOptions,
-            variants: enabledVariants.map((v) => ({
-              title: v.title,
-              sku: v.sku || undefined,
-              options: mapped.variantOptionMap.get(v.id) ?? {},
-              prices: [
-                {
-                  amount: v.price,
-                  currency_code: "usd",
-                },
-              ],
-              manage_inventory: false,
-              metadata: {
-                printify_variant_id: v.id,
-                printify_product_id: pp.printify_id,
-              },
-              images: mapped.variantImageMap.get(v.id) ?? [],
-            })),
+            variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id),
           })
           updated++
           logger.info(`[printify] Updated Medusa product "${pp.title}" (${medusaProductId})`)
@@ -279,7 +261,7 @@ export const syncProductsWorkflow = createWorkflow(
   (input: SyncProductsInput) => {
     const products = fetchAllProductsStep(input)
     const upsertResult = upsertProductsStep({ products, shopId: input.shopId })
-    const medusaResult = createMedusaProductsStep({ shopId: input.shopId })
+    const medusaResult = createMedusaProductsStep({ shopId: input.shopId, _upsertDone: upsertResult })
     return new WorkflowResponse(medusaResult)
   }
 )
