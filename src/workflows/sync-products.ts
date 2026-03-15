@@ -159,10 +159,19 @@ const createMedusaProductsStep = createStep(
       const storeService = container.resolve(Modules.STORE)
       const stores = await storeService.listStores({})
       salesChannelId = stores[0]?.default_sales_channel_id ?? null
+
+      if (salesChannelId) {
+        logger.info(`[printify] Using store default sales channel: ${salesChannelId}`)
+      }
     }
 
     if (!salesChannelId) {
-      logger.warn("[printify] No sales channel found (shop or store default) — skipping Medusa product creation")
+      logger.error(
+        `[printify] PRODUCTS WILL NOT APPEAR ON STOREFRONT — no sales channel configured. ` +
+        `Set printify_shop.sales_channel_id via PATCH /admin/printify/shops/${shopId}, ` +
+        `or set a default_sales_channel_id on the store. ` +
+        `(${printifyProducts.length} published products waiting to sync)`
+      )
       return new StepResponse({ created: 0, updated: 0 })
     }
 
