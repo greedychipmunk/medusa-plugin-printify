@@ -6,6 +6,17 @@ export type PrintifyShop = {
   sales_channel?: string
 }
 
+export type PrintifyOptionValue = {
+  id: number
+  title: string
+}
+
+export type PrintifyOption = {
+  name: string
+  type: string
+  values: PrintifyOptionValue[]
+}
+
 export type PrintifyVariant = {
   id: number
   sku: string
@@ -20,6 +31,7 @@ export type PrintifyVariant = {
 
 export type PrintifyImage = {
   src: string
+  variant_ids?: number[]
   position: string
   is_default: boolean
 }
@@ -28,10 +40,12 @@ export type PrintifyProduct = {
   id: string
   title: string
   description: string
+  options: PrintifyOption[]
   variants: PrintifyVariant[]
   images: PrintifyImage[]
   print_areas: Record<string, unknown>[]
   is_locked: boolean
+  visible: boolean
 }
 
 export type PrintifyAddress = {
