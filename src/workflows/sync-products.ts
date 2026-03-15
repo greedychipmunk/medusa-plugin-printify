@@ -251,8 +251,8 @@ const createMedusaProductsStep = createStep(
               [Modules.PRODUCT]: { product_id: medusaProductId },
               [Modules.SALES_CHANNEL]: { sales_channel_id: salesChannelId },
             })
-          } catch {
-            // Link already exists — that's fine
+          } catch (linkErr) {
+            logger.debug(`[printify] Sales channel link for product ${medusaProductId}: ${linkErr}`)
           }
 
           updated++
