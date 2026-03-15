@@ -35,6 +35,13 @@ describe("syncProductsWorkflow", () => {
     expect(source).toContain("mapped.variantImageMap")
   })
 
+  it("ensures sales channel link on update path (not just create)", () => {
+    // The update branch must also reconcile sales channel assignment
+    // so products that lost their channel link get restored on re-sync
+    const updateSection = source.substring(source.indexOf("// Update existing"))
+    expect(updateSection).toContain("sales_channel_id")
+  })
+
   it("updates existing products with new options and variants on re-sync", () => {
     expect(source).toContain("updateProducts")
     // The update path should include options and variants

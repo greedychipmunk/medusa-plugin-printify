@@ -244,6 +244,17 @@ const createMedusaProductsStep = createStep(
             options: mapped.medusaOptions,
             variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id),
           })
+
+          // Ensure sales channel link exists (idempotent — link.create is a no-op if already linked)
+          try {
+            await link.create({
+              [Modules.PRODUCT]: { product_id: medusaProductId },
+              [Modules.SALES_CHANNEL]: { sales_channel_id: salesChannelId },
+            })
+          } catch {
+            // Link already exists — that's fine
+          }
+
           updated++
           logger.info(`[printify] Updated Medusa product "${pp.title}" (${medusaProductId})`)
         } catch (err) {
