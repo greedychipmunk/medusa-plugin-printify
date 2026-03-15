@@ -25,6 +25,10 @@ export function mapPrintifyOptions(
 
   const enabledVariants = variants.filter((v) => v.is_enabled)
 
+  if (enabledVariants.length === 0) {
+    return null
+  }
+
   // Build variant option map: printify variant ID -> { OptionName: ValueTitle }
   const variantOptionMap = new Map<number, Record<string, string>>()
   for (const v of enabledVariants) {
@@ -50,9 +54,11 @@ export function mapPrintifyOptions(
   const medusaOptions = options
     .map((opt) => ({
       title: opt.name,
-      values: opt.values
-        .filter((val) => usedValueIds.has(val.id))
-        .map((val) => val.title),
+      values: [...new Set(
+        opt.values
+          .filter((val) => usedValueIds.has(val.id))
+          .map((val) => val.title)
+      )],
     }))
     .filter((opt) => opt.values.length > 0)
 

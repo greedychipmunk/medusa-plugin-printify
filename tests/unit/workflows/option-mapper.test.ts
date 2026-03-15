@@ -81,6 +81,11 @@ describe("mapPrintifyOptions", () => {
     }
   })
 
+  it("returns null when all variants are disabled", () => {
+    const allDisabled: PrintifyVariant[] = variants.map((v) => ({ ...v, is_enabled: false }))
+    expect(mapPrintifyOptions(sizeColorOptions, allDisabled, images)).toBeNull()
+  })
+
   it("handles single-option products", () => {
     const singleOption: PrintifyOption[] = [
       { name: "Size", type: "size", values: [{ id: 1, title: "S" }, { id: 2, title: "M" }] },
