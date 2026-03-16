@@ -1,5 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import { IProductModuleService } from "@medusajs/types"
 import { PRINTIFY_MODULE } from "../../../../../modules/printify"
 import PrintifyModuleService from "../../../../../modules/printify/service"
@@ -84,6 +84,34 @@ export async function PATCH(req: MedusaRequest, res: MedusaResponse) {
       const medusaProductId: string = data[0].product.id
       const productModuleService = req.scope.resolve<IProductModuleService>("product")
       await productModuleService.updateProducts(medusaProductId, { status: is_published ? "published" : "draft" })
+
+      // When publishing, ensure the Medusa product is assigned to a sales channel
+      if (is_published) {
+        let salesChannelId: string | null = null
+
+        // Try shop-level sales channel first
+        const shops = await service.listPrintifyShops({ printify_id: product.shop_id })
+        salesChannelId = shops[0]?.sales_channel_id ?? null
+
+        // Fall back to store default
+        if (!salesChannelId) {
+          const storeService = req.scope.resolve(Modules.STORE)
+          const stores = await storeService.listStores({})
+          salesChannelId = stores[0]?.default_sales_channel_id ?? null
+        }
+
+        if (salesChannelId) {
+          const link = req.scope.resolve(ContainerRegistrationKeys.LINK)
+          try {
+            await link.create({
+              [Modules.PRODUCT]: { product_id: medusaProductId },
+              [Modules.SALES_CHANNEL]: { sales_channel_id: salesChannelId },
+            })
+          } catch {
+            // Link may already exist — that's fine
+          }
+        }
+      }
     }
   } catch {
     // Link module not configured or Medusa product update failed — continue
