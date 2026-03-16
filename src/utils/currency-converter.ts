@@ -2,6 +2,11 @@ import axios from "axios"
 
 export type ExchangeRates = Record<string, number>
 
+/**
+ * Fetches latest exchange rates from USD to the given currency codes
+ * using the Frankfurter API (free, ECB-backed, no API key needed).
+ * Returns a map of lowercase currency_code → rate relative to USD.
+ */
 export async function fetchExchangeRates(
   currencyCodes: string[]
 ): Promise<ExchangeRates> {
@@ -29,6 +34,10 @@ export async function fetchExchangeRates(
   }
 }
 
+/**
+ * Converts a price in USD cents to the target currency using the given rates.
+ * Returns the converted amount as an integer (rounded).
+ */
 export function convertPrice(
   amountInUsdCents: number,
   targetCurrency: string,
