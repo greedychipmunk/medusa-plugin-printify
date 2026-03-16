@@ -11,6 +11,8 @@ import { PRINTIFY_MODULE } from "../modules/printify"
 import PrintifyModuleService from "../modules/printify/service"
 import { PrintifyProduct, PrintifyVariant, PrintifyImage, PrintifyOption } from "../modules/printify/api-client"
 import { mapPrintifyOptions } from "./option-mapper"
+import { fetchExchangeRates, type ExchangeRates } from "../utils/currency-converter"
+import { buildVariantPrices } from "../utils/build-variant-prices"
 
 type SyncProductsInput = {
   shopId: string
@@ -92,27 +94,67 @@ function slugify(text: string): string {
 function buildMedusaVariants(
   enabledVariants: PrintifyVariant[],
   mapped: NonNullable<ReturnType<typeof mapPrintifyOptions>>,
-  printifyProductId: string
+  printifyProductId: string,
+  currencies: string[],
+  rates: ExchangeRates
 ) {
   return enabledVariants.map((v) => ({
     title: v.title,
     sku: v.sku || undefined,
     options: mapped.variantOptionMap.get(v.id) ?? {},
-    prices: [
-      {
-        amount: v.price,
-        currency_code: "usd",
-      },
-    ],
+    prices: buildVariantPrices(v.price, currencies, rates),
     manage_inventory: false,
     metadata: {
       printify_variant_id: v.id,
       printify_product_id: printifyProductId,
     },
-    // Note: variant images must be associated AFTER product creation via
-    // addImageToVariant — passing images inline causes MikroORM ValidationError
-    // (product_id undefined). Variant image association is a separate step.
   }))
+}
+
+async function associateVariantImages(
+  productModuleService: IProductModuleService,
+  medusaProductId: string,
+  variantImageMap: Map<number, { url: string }[]>,
+  logger: { info: (msg: string) => void; warn: (msg: string) => void }
+) {
+  const product = await productModuleService.retrieveProduct(medusaProductId, {
+    relations: ["images", "variants"],
+  })
+
+  logger.info(`[printify] associateVariantImages: product ${medusaProductId} has ${product.images?.length ?? 0} images, ${product.variants?.length ?? 0} variants, variantImageMap has ${variantImageMap.size} entries`)
+
+  const urlToImageId = new Map<string, string>()
+  for (const img of product.images ?? []) {
+    urlToImageId.set(img.url, img.id)
+  }
+
+  const pairs: { image_id: string; variant_id: string }[] = []
+  for (const variant of product.variants ?? []) {
+    const printifyVarId = variant.metadata?.printify_variant_id
+    if (printifyVarId == null) continue
+    // Handle both number and string types from JSON round-trip
+    const numericId = typeof printifyVarId === "string" ? parseInt(printifyVarId, 10) : printifyVarId as number
+    const imageUrls = variantImageMap.get(numericId)
+    if (!imageUrls?.length) {
+      logger.warn(`[printify] associateVariantImages: no images in variantImageMap for printify variant ${numericId}`)
+      continue
+    }
+    for (const { url } of imageUrls) {
+      const medusaImageId = urlToImageId.get(url)
+      if (medusaImageId) {
+        pairs.push({ image_id: medusaImageId, variant_id: variant.id })
+      } else {
+        logger.warn(`[printify] associateVariantImages: URL not found in Medusa images: ${url}`)
+      }
+    }
+  }
+
+  if (pairs.length > 0) {
+    await productModuleService.addImageToVariant(pairs)
+    logger.info(`[printify] Associated ${pairs.length} variant-image pairs for product ${medusaProductId}`)
+  } else {
+    logger.warn(`[printify] associateVariantImages: NO pairs created for product ${medusaProductId}`)
+  }
 }
 
 function extractPrintifyMappings(pp: { printify_data: unknown; variants: unknown; images: unknown }) {
@@ -177,6 +219,34 @@ const createMedusaProductsStep = createStep(
       return new StepResponse({ created: 0, updated: 0 })
     }
 
+    // Fetch all unique currencies from active regions
+    const regionModule = container.resolve(Modules.REGION)
+    const regions = await regionModule.listRegions({})
+    const currencies = [...new Set(regions.map((r) => r.currency_code))]
+
+    // Always include usd (Printify's base currency)
+    if (!currencies.includes("usd")) {
+      currencies.unshift("usd")
+    }
+
+    // Fetch exchange rates once for all products in this sync
+    let rates: ExchangeRates = {}
+    try {
+      rates = await fetchExchangeRates(currencies)
+      logger.info(`[printify] Fetched exchange rates for ${currencies.join(", ")}`)
+    } catch (err) {
+      logger.warn(
+        `[printify] Could not fetch exchange rates — falling back to USD only: ${
+          err instanceof Error ? err.message : err
+        }`
+      )
+    }
+
+    // If rates fetch failed, only create USD prices
+    const activeCurrencies = Object.keys(rates).length > 0
+      ? currencies
+      : ["usd"]
+
     let created = 0
     let updated = 0
 
@@ -221,7 +291,7 @@ const createMedusaProductsStep = createStep(
                   status: "published" as const,
                   images: printifyImages.map((img) => ({ url: img.src })),
                   options: mapped.medusaOptions,
-                  variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id),
+                  variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id, activeCurrencies, rates),
                   sales_channels: [{ id: salesChannelId }],
                   shipping_profile_id: shippingProfileId,
                 },
@@ -236,6 +306,8 @@ const createMedusaProductsStep = createStep(
             [PRINTIFY_MODULE]: { printify_product_id: pp.id },
             [Modules.PRODUCT]: { product_id: newProduct.id },
           })
+
+          await associateVariantImages(productModuleService, newProduct.id, mapped.variantImageMap, logger)
 
           created++
           logger.info(`[printify] Created Medusa product "${pp.title}" (${newProduct.id})`)
@@ -253,7 +325,7 @@ const createMedusaProductsStep = createStep(
             status: targetStatus as any,
             images: printifyImages.map((img) => ({ url: img.src })),
             options: mapped.medusaOptions,
-            variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id),
+            variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id, activeCurrencies, rates),
           })
 
           // Ensure sales channel link exists (idempotent — link.create is a no-op if already linked)
@@ -265,6 +337,8 @@ const createMedusaProductsStep = createStep(
           } catch (linkErr) {
             logger.debug(`[printify] Sales channel link for product ${medusaProductId}: ${linkErr}`)
           }
+
+          await associateVariantImages(productModuleService, medusaProductId, mapped.variantImageMap, logger)
 
           updated++
           logger.info(`[printify] Updated Medusa product "${pp.title}" (${medusaProductId})`)
