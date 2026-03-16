@@ -16,7 +16,7 @@ export default async function syncProductsJob(container: MedusaContainer) {
     input: { shopId },
   })
 
-  console.log(`[printify] sync-products-job: synced ${result.synced} products`)
+  console.log(`[printify] sync-products-job: created ${result.created}, updated ${result.updated} Medusa products`)
 }
 
 export const config = {

@@ -1,6 +1,8 @@
 import { defineRouteConfig } from "@medusajs/admin-sdk"
+import { ArrowRight, BuildingStorefront } from "@medusajs/icons"
 import { Container, Heading, Button, Table, Badge } from "@medusajs/ui"
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 
 type PrintifyShop = { id: string; printify_id: string; title: string }
 
@@ -40,14 +42,35 @@ const PrintifyPage = () => {
           <Table.Row>
             <Table.HeaderCell>Shop Name</Table.HeaderCell>
             <Table.HeaderCell>Printify ID</Table.HeaderCell>
+            <Table.HeaderCell></Table.HeaderCell>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {shops.map(shop => (
             <Table.Row key={shop.id}>
-              <Table.Cell>{shop.title}</Table.Cell>
               <Table.Cell>
-                <Badge color="grey" size="2xsmall">{shop.printify_id}</Badge>
+                <Link
+                  to={`/printify/products?shop_id=${shop.printify_id}&shop_name=${encodeURIComponent(shop.title)}`}
+                  className="block w-full text-inherit no-underline"
+                >
+                  {shop.title}
+                </Link>
+              </Table.Cell>
+              <Table.Cell>
+                <Link
+                  to={`/printify/products?shop_id=${shop.printify_id}&shop_name=${encodeURIComponent(shop.title)}`}
+                  className="block w-full no-underline"
+                >
+                  <Badge color="grey" size="2xsmall">{shop.printify_id}</Badge>
+                </Link>
+              </Table.Cell>
+              <Table.Cell>
+                <Link
+                  to={`/printify/products?shop_id=${shop.printify_id}&shop_name=${encodeURIComponent(shop.title)}`}
+                  className="block w-full no-underline text-ui-fg-muted"
+                >
+                  <ArrowRight />
+                </Link>
               </Table.Cell>
             </Table.Row>
           ))}
@@ -59,7 +82,7 @@ const PrintifyPage = () => {
 
 export const config = defineRouteConfig({
   label: "Printify",
-  icon: () => null,
+  icon: BuildingStorefront,
 })
 
 export default PrintifyPage

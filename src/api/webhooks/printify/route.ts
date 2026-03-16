@@ -1,7 +1,10 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { IProductModuleService, MedusaContainer } from "@medusajs/framework/types"
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import { PRINTIFY_MODULE } from "../../../modules/printify"
 import PrintifyModuleService from "../../../modules/printify/service"
 import { verifyPrintifySignature } from "../../../lib/webhook-utils"
+import { syncProductsWorkflow } from "../../../workflows/sync-products"
 
 type PrintifyWebhookBody = {
   type: string
@@ -40,7 +43,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
       case "product:updated":
       case "product:deleted":
-        await handleProductEvent(body, service)
+        await handleProductEvent(body, service, req.scope)
         break
 
       case "shop:disconnected":
@@ -76,15 +79,48 @@ async function handleOrderEvent(
 
 async function handleProductEvent(
   body: PrintifyWebhookBody,
-  service: PrintifyModuleService
+  service: PrintifyModuleService,
+  container: MedusaContainer
 ) {
   if (body.type === "product:deleted") {
+    const printifyId = String(body.resource.id)
     await service.updatePrintifyProducts({
-      selector: { printify_id: String(body.resource.id) },
+      selector: { printify_id: printifyId },
       data: { is_published: false },
     })
+
+    // Also draft the linked Medusa product so it's removed from the storefront
+    try {
+      const query = container.resolve(ContainerRegistrationKeys.QUERY)
+      const { data } = await query.graph({
+        entity: "printify_product",
+        fields: ["product.id"],
+        filters: { printify_id: printifyId },
+      })
+      if (data.length > 0 && data[0].product?.id) {
+        const productModuleService = container.resolve<IProductModuleService>(Modules.PRODUCT)
+        await productModuleService.updateProducts(data[0].product.id, { status: "draft" as any })
+        console.log(`[printify] webhook: drafted Medusa product ${data[0].product.id} after Printify deletion`)
+      }
+    } catch (err) {
+      console.warn(`[printify] webhook: failed to draft Medusa product for printify_id ${printifyId}: ${err}`)
+    }
+
+    console.log(`[printify] webhook: product deleted: ${body.resource.id}`)
+    return
   }
-  console.log(`[printify] webhook: product event: ${body.type} for ${body.resource.id}`)
+
+  // product:updated — re-sync this single product via the full workflow
+  // This fetches latest data from Printify, upserts the printify_product,
+  // and creates/updates the linked Medusa product
+  console.log(`[printify] webhook: product updated: ${body.resource.id}, triggering sync`)
+  try {
+    await syncProductsWorkflow(container).run({
+      input: { shopId: body.shop_id },
+    })
+  } catch (err) {
+    console.error(`[printify] webhook: failed to sync after product:updated: ${err}`)
+  }
 }
 
 async function handleShopDisconnected(
