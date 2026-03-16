@@ -109,7 +109,9 @@ function buildMedusaVariants(
       printify_variant_id: v.id,
       printify_product_id: printifyProductId,
     },
-    images: mapped.variantImageMap.get(v.id) ?? [],
+    // Note: variant images must be associated AFTER product creation via
+    // addImageToVariant — passing images inline causes MikroORM ValidationError
+    // (product_id undefined). Variant image association is a separate step.
   }))
 }
 
@@ -238,7 +240,7 @@ const createMedusaProductsStep = createStep(
           created++
           logger.info(`[printify] Created Medusa product "${pp.title}" (${newProduct.id})`)
         } catch (err) {
-          logger.error(`[printify] Failed to create Medusa product for "${pp.title}": ${err}`)
+          logger.error(`[printify] Failed to create Medusa product for "${pp.title}": ${err instanceof Error ? err.message : JSON.stringify(err)}`)
         }
       } else {
         // Update existing linked Medusa product
@@ -267,7 +269,7 @@ const createMedusaProductsStep = createStep(
           updated++
           logger.info(`[printify] Updated Medusa product "${pp.title}" (${medusaProductId})`)
         } catch (err) {
-          logger.error(`[printify] Failed to update Medusa product ${medusaProductId}: ${err}`)
+          logger.error(`[printify] Failed to update Medusa product ${medusaProductId}: ${err instanceof Error ? err.message : JSON.stringify(err)}`)
         }
       }
     }

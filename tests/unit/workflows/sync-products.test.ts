@@ -31,8 +31,13 @@ describe("syncProductsWorkflow", () => {
     expect(source).toContain("printify_product_id")
   })
 
-  it("maps variant images from variantImageMap", () => {
-    expect(source).toContain("mapped.variantImageMap")
+  it("does not pass images inline on variants (requires post-creation association)", () => {
+    // Variant images cannot be passed inline during createProductsWorkflow —
+    // they cause MikroORM ValidationError (product_id undefined).
+    // Images must be associated after product creation via addImageToVariant.
+    const buildVariantsSection = source.substring(source.indexOf("buildMedusaVariants"))
+    const fnBody = buildVariantsSection.substring(0, buildVariantsSection.indexOf("function "))
+    expect(fnBody).not.toContain("images:")
   })
 
   it("ensures sales channel link on update path (not just create)", () => {
