@@ -47,11 +47,41 @@ describe("syncProductsWorkflow", () => {
     expect(updateSection).toContain("sales_channel_id")
   })
 
+  it("associates variant images after product creation", () => {
+    expect(source).toContain("addImageToVariant")
+  })
+
   it("updates existing products with new options and variants on re-sync", () => {
     expect(source).toContain("updateProducts")
     // The update path should include options and variants
     const updateSection = source.substring(source.indexOf("updateProducts"))
     expect(updateSection).toContain("options:")
     expect(updateSection).toContain("variants:")
+  })
+
+  it("imports fetchExchangeRates from currency-converter", () => {
+    expect(source).toContain("fetchExchangeRates")
+  })
+
+  it("imports buildVariantPrices from build-variant-prices", () => {
+    expect(source).toContain("buildVariantPrices")
+  })
+
+  it("queries Medusa regions for currency codes", () => {
+    expect(source).toContain("Modules.REGION")
+    expect(source).toContain("listRegions")
+  })
+
+  it("passes currencies and rates to buildMedusaVariants", () => {
+    const fnSignature = source.substring(
+      source.indexOf("function buildMedusaVariants"),
+      source.indexOf("{", source.indexOf("function buildMedusaVariants"))
+    )
+    expect(fnSignature).toContain("currencies")
+    expect(fnSignature).toContain("rates")
+  })
+
+  it("no longer hardcodes usd currency_code", () => {
+    expect(source).not.toContain('currency_code: "usd"')
   })
 })
