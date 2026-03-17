@@ -231,21 +231,26 @@ const createMedusaProductsStep = createStep(
 
     // Fetch exchange rates once for all products in this sync
     let rates: ExchangeRates = {}
-    try {
-      rates = await fetchExchangeRates(currencies)
-      logger.info(`[printify] Fetched exchange rates for ${currencies.join(", ")}`)
-    } catch (err) {
-      logger.warn(
-        `[printify] Could not fetch exchange rates — falling back to USD only: ${
-          err instanceof Error ? err.message : err
-        }`
-      )
+    let ratesFetched = false
+    if (currencies.length === 1 && currencies[0] === "usd") {
+      logger.info("[printify] Only USD region active — skipping exchange rate fetch")
+      ratesFetched = true
+    } else {
+      try {
+        rates = await fetchExchangeRates(currencies)
+        ratesFetched = true
+        logger.info(`[printify] Fetched exchange rates for ${currencies.join(", ")}`)
+      } catch (err) {
+        logger.warn(
+          `[printify] Could not fetch exchange rates — falling back to USD only: ${
+            err instanceof Error ? err.message : err
+          }`
+        )
+      }
     }
 
     // If rates fetch failed, only create USD prices
-    const activeCurrencies = Object.keys(rates).length > 0
-      ? currencies
-      : ["usd"]
+    const activeCurrencies = ratesFetched ? currencies : ["usd"]
 
     let created = 0
     let updated = 0
