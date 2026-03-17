@@ -38,19 +38,21 @@ describe("currency-converter", () => {
     const rates = { eur: 0.92, dkk: 6.85 }
 
     it("returns the original amount for usd", () => {
-      expect(convertPrice(1000, "usd", rates)).toBe(1000)
+      expect(convertPrice(19.99, "usd", rates)).toBe(19.99)
     })
 
     it("converts usd amount to target currency using rate", () => {
-      expect(convertPrice(1000, "eur", rates)).toBe(920)
+      // 19.99 * 0.92 = 18.3908 → 18.39
+      expect(convertPrice(19.99, "eur", rates)).toBe(18.39)
     })
 
-    it("rounds to nearest integer", () => {
-      expect(convertPrice(999, "dkk", rates)).toBe(6843)
+    it("rounds to 2 decimal places", () => {
+      // 19.99 * 6.85 = 136.9315 → 136.93
+      expect(convertPrice(19.99, "dkk", rates)).toBe(136.93)
     })
 
     it("throws for unknown currency", () => {
-      expect(() => convertPrice(1000, "gbp", rates)).toThrow(
+      expect(() => convertPrice(19.99, "gbp", rates)).toThrow(
         "No exchange rate for gbp"
       )
     })

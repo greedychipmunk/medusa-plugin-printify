@@ -35,17 +35,17 @@ export async function fetchExchangeRates(
 }
 
 /**
- * Converts a price in USD cents to the target currency using the given rates.
- * Returns the converted amount as an integer (rounded).
+ * Converts a price in USD to the target currency using the given rates.
+ * Returns the converted amount rounded to 2 decimal places.
  */
 export function convertPrice(
-  amountInUsdCents: number,
+  amountInUsd: number,
   targetCurrency: string,
   rates: ExchangeRates
 ): number {
   const currency = targetCurrency.toLowerCase()
-  if (currency === "usd") return amountInUsdCents
+  if (currency === "usd") return amountInUsd
   const rate = rates[currency]
   if (rate == null) throw new Error(`No exchange rate for ${currency}`)
-  return Math.round(amountInUsdCents * rate)
+  return Math.round(amountInUsd * rate * 100) / 100
 }
