@@ -96,9 +96,11 @@ function buildMedusaVariants(
   mapped: NonNullable<ReturnType<typeof mapPrintifyOptions>>,
   printifyProductId: string,
   currencies: string[],
-  rates: ExchangeRates
+  rates: ExchangeRates,
+  existingVariantIdMap?: Map<number, string>
 ) {
   return enabledVariants.map((v) => ({
+    ...(existingVariantIdMap?.get(v.id) ? { id: existingVariantIdMap.get(v.id) } : {}),
     title: v.title,
     sku: v.sku || undefined,
     options: mapped.variantOptionMap.get(v.id) ?? {},
@@ -249,8 +251,12 @@ const createMedusaProductsStep = createStep(
       }
     }
 
-    // If rates fetch failed, only create USD prices
+    // If rates fetch failed, only create USD prices (for new products)
     const activeCurrencies = ratesFetched ? currencies : ["usd"]
+
+    // When we need multi-currency pricing but rates are unavailable,
+    // avoid overwriting existing multi-currency prices on product updates
+    const hasCompletePricing = ratesFetched || currencies.length <= 1
 
     let created = 0
     let updated = 0
@@ -324,13 +330,37 @@ const createMedusaProductsStep = createStep(
         try {
           const targetStatus = pp.is_published ? "published" : "draft"
 
+          // Build a map of existing Medusa variant IDs keyed by Printify variant ID
+          // so updateProducts can match existing variants instead of trying to create duplicates
+          const existingProduct = await productModuleService.retrieveProduct(medusaProductId, {
+            relations: ["variants"],
+          })
+          const existingVariantIdMap = new Map<number, string>()
+          for (const variant of existingProduct.variants ?? []) {
+            const printifyVarId = variant.metadata?.printify_variant_id
+            if (printifyVarId != null) {
+              const numericId = typeof printifyVarId === "string" ? parseInt(printifyVarId, 10) : printifyVarId as number
+              existingVariantIdMap.set(numericId, variant.id)
+            }
+          }
+
+          if (!hasCompletePricing) {
+            logger.warn(
+              `[printify] Skipping variant/price update for "${pp.title}" — exchange rates unavailable, preserving existing multi-currency prices`
+            )
+          }
+
           await productModuleService.updateProducts(medusaProductId, {
             title: pp.title,
             description: pp.description || undefined,
             status: targetStatus as any,
             images: printifyImages.map((img) => ({ url: img.src })),
-            options: mapped.medusaOptions,
-            variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id, activeCurrencies, rates),
+            ...(hasCompletePricing
+              ? {
+                  options: mapped.medusaOptions,
+                  variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id, activeCurrencies, rates, existingVariantIdMap),
+                }
+              : {}),
           })
 
           // Ensure sales channel link exists (idempotent — link.create is a no-op if already linked)
