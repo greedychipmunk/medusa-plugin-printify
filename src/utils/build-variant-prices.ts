@@ -10,7 +10,7 @@ export function buildVariantPrices(
   currencies: string[],
   rates: ExchangeRates
 ): { amount: number; currency_code: string }[] {
-  const priceInDollars = printifyPriceUsdCents / 100
+  const priceInDollars = (printifyPriceUsdCents ?? 0) / 100
   return currencies.map((currency) => ({
     amount: convertPrice(priceInDollars, currency, rates),
     currency_code: currency,
