@@ -5,7 +5,7 @@ import {
   StepResponse,
 } from "@medusajs/framework/workflows-sdk"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
-import { createProductsWorkflow } from "@medusajs/medusa/core-flows"
+import { createProductsWorkflow, updateProductsWorkflow } from "@medusajs/medusa/core-flows"
 import { IProductModuleService } from "@medusajs/types"
 import { PRINTIFY_MODULE } from "../modules/printify"
 import PrintifyModuleService from "../modules/printify/service"
@@ -350,28 +350,26 @@ const createMedusaProductsStep = createStep(
             )
           }
 
-          await productModuleService.updateProducts(medusaProductId, {
-            title: pp.title,
-            description: pp.description || undefined,
-            status: targetStatus as any,
-            images: printifyImages.map((img) => ({ url: img.src })),
-            ...(hasCompletePricing
-              ? {
-                  options: mapped.medusaOptions,
-                  variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id, activeCurrencies, rates, existingVariantIdMap),
-                }
-              : {}),
+          await updateProductsWorkflow(container).run({
+            input: {
+              products: [
+                {
+                  id: medusaProductId,
+                  title: pp.title,
+                  description: pp.description || undefined,
+                  status: targetStatus as any,
+                  images: printifyImages.map((img) => ({ url: img.src })),
+                  sales_channels: [{ id: salesChannelId }],
+                  ...(hasCompletePricing
+                    ? {
+                        options: mapped.medusaOptions,
+                        variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id, activeCurrencies, rates, existingVariantIdMap),
+                      }
+                    : {}),
+                },
+              ],
+            },
           })
-
-          // Ensure sales channel link exists (idempotent — link.create is a no-op if already linked)
-          try {
-            await link.create({
-              [Modules.PRODUCT]: { product_id: medusaProductId },
-              [Modules.SALES_CHANNEL]: { sales_channel_id: salesChannelId },
-            })
-          } catch (linkErr) {
-            logger.debug(`[printify] Sales channel link for product ${medusaProductId}: ${linkErr}`)
-          }
 
           await associateVariantImages(productModuleService, medusaProductId, mapped.variantImageMap, logger)
 
