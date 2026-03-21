@@ -13,7 +13,6 @@ import { PrintifyProduct, PrintifyVariant, PrintifyImage, PrintifyOption } from 
 import { mapPrintifyOptions } from "./option-mapper"
 import { fetchExchangeRates, type ExchangeRates } from "../utils/currency-converter"
 import { buildVariantPrices } from "../utils/build-variant-prices"
-import { syncProductImagesToS3, resolveImageUrls, resolveSingleUrl, type PrintifyImageMapping } from "../utils/sync-images-to-s3"
 
 type SyncProductsInput = {
   shopId: string
@@ -160,83 +159,19 @@ async function associateVariantImages(
   }
 }
 
-function extractPrintifyMappings(pp: { printify_data: unknown; variants: unknown; images: unknown; image_urls?: unknown }) {
+function extractPrintifyMappings(pp: { printify_data: unknown; variants: unknown; images: unknown }) {
   const printifyData = pp.printify_data as unknown as { options?: PrintifyOption[] } | null
   const printifyOptions = (printifyData?.options as PrintifyOption[]) ?? []
   const variants = (pp.variants as unknown as PrintifyVariant[]) ?? []
   const printifyImages = (pp.images as unknown as PrintifyImage[]) ?? []
   const enabledVariants = variants.filter((v) => v.is_enabled)
   const mapped = mapPrintifyOptions(printifyOptions, variants, printifyImages)
-  const imageMappings = (pp.image_urls as PrintifyImageMapping[] | null) ?? null
-  return { variants, enabledVariants, printifyImages, mapped, imageMappings }
+  return { variants, enabledVariants, printifyImages, mapped }
 }
-
-const syncImagesToS3Step = createStep(
-  "printify-sync-images-to-s3-step",
-  async ({ shopId, _dep }: { shopId: string; _dep?: unknown }, { container }) => {
-    const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
-
-    // Try to resolve the file module — if not configured, skip gracefully
-    let fileModuleService: any
-    try {
-      fileModuleService = container.resolve(Modules.FILE)
-    } catch {
-      logger.info("[printify-s3] File module not configured — skipping S3 image sync, using Printify CDN URLs")
-      return new StepResponse({ uploaded: 0, skipped: 0, failed: 0, orphans: 0 })
-    }
-
-    const service: PrintifyModuleService = container.resolve(PRINTIFY_MODULE)
-    const printifyProducts = await service.listPrintifyProducts({ shop_id: shopId })
-
-    let uploaded = 0
-    let skipped = 0
-    let failed = 0
-    let orphans = 0
-
-    for (const pp of printifyProducts) {
-      const printifyImages = (pp.images as unknown as PrintifyImage[]) ?? []
-      if (printifyImages.length === 0) continue
-
-      const existingMappings = (pp.image_urls as PrintifyImageMapping[] | null) ?? null
-
-      // Count already-synced images before the call
-      const alreadySynced = (existingMappings ?? []).filter((m) => m.s3_url).length
-
-      // Count orphans (images in mappings but no longer in Printify)
-      const currentSrcs = new Set(printifyImages.map((img) => img.src))
-      const orphanCount = (existingMappings ?? []).filter((m) => !currentSrcs.has(m.printify_src) && m.s3_file_key).length
-
-      const updatedMappings = await syncProductImagesToS3(
-        printifyImages,
-        existingMappings,
-        fileModuleService,
-        pp.printify_id,
-        logger
-      )
-
-      // Persist the updated mappings
-      await service.updatePrintifyProducts({
-        selector: { id: pp.id },
-        data: { image_urls: updatedMappings as unknown as Record<string, unknown> },
-      })
-
-      // Tally stats
-      const newlySynced = updatedMappings.filter((m) => m.s3_url).length - alreadySynced
-      const newlyFailed = updatedMappings.filter((m) => !m.s3_url).length
-      uploaded += Math.max(0, newlySynced)
-      skipped += Math.max(0, alreadySynced)
-      failed += newlyFailed
-      orphans += orphanCount
-    }
-
-    logger.info(`[printify-s3] Image sync complete: ${uploaded} uploaded, ${skipped} skipped, ${failed} failed, ${orphans} orphans cleaned`)
-    return new StepResponse({ uploaded, skipped, failed, orphans })
-  }
-)
 
 const createMedusaProductsStep = createStep(
   "printify-create-medusa-products-step",
-  async ({ shopId, _dep }: { shopId: string; _dep?: unknown }, { container }) => {
+  async ({ shopId, _upsertDone }: { shopId: string; _upsertDone?: unknown }, { container }) => {
     const service: PrintifyModuleService = container.resolve(PRINTIFY_MODULE)
     const query = container.resolve(ContainerRegistrationKeys.QUERY)
     const link = container.resolve(ContainerRegistrationKeys.LINK)
@@ -342,7 +277,7 @@ const createMedusaProductsStep = createStep(
         // Link query failed — treat as no link
       }
 
-      const { enabledVariants, printifyImages, mapped, imageMappings } = extractPrintifyMappings(pp)
+      const { enabledVariants, printifyImages, mapped } = extractPrintifyMappings(pp)
 
       if (enabledVariants.length === 0) {
         logger.warn(`[printify] Product "${pp.title}" has no enabled variants — skipping`)
@@ -365,7 +300,7 @@ const createMedusaProductsStep = createStep(
                   description: pp.description || undefined,
                   handle: slugify(pp.title),
                   status: "published" as const,
-                  images: resolveImageUrls(printifyImages, imageMappings),
+                  images: printifyImages.map((img) => ({ url: img.src })),
                   options: mapped.medusaOptions,
                   variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id, activeCurrencies, rates),
                   sales_channels: [{ id: salesChannelId }],
@@ -383,13 +318,7 @@ const createMedusaProductsStep = createStep(
             [Modules.PRODUCT]: { product_id: newProduct.id },
           })
 
-          // Translate variantImageMap URLs from Printify CDN → S3 so URL matching works
-          const resolvedVariantImageMap = new Map<number, { url: string }[]>()
-          for (const [vid, imgs] of mapped.variantImageMap) {
-            resolvedVariantImageMap.set(vid, imgs.map((img) => ({ url: resolveSingleUrl(img.url, imageMappings) })))
-          }
-
-          await associateVariantImages(productModuleService, newProduct.id, resolvedVariantImageMap, logger)
+          await associateVariantImages(productModuleService, newProduct.id, mapped.variantImageMap, logger)
 
           created++
           logger.info(`[printify] Created Medusa product "${pp.title}" (${newProduct.id})`)
@@ -429,7 +358,7 @@ const createMedusaProductsStep = createStep(
                   title: pp.title,
                   description: pp.description || undefined,
                   status: targetStatus as any,
-                  images: resolveImageUrls(printifyImages, imageMappings),
+                  images: printifyImages.map((img) => ({ url: img.src })),
                   sales_channels: [{ id: salesChannelId }],
                   ...(hasCompletePricing
                     ? {
@@ -442,13 +371,7 @@ const createMedusaProductsStep = createStep(
             },
           })
 
-          // Translate variantImageMap URLs from Printify CDN → S3 so URL matching works
-          const resolvedVariantImageMap = new Map<number, { url: string }[]>()
-          for (const [vid, imgs] of mapped.variantImageMap) {
-            resolvedVariantImageMap.set(vid, imgs.map((img) => ({ url: resolveSingleUrl(img.url, imageMappings) })))
-          }
-
-          await associateVariantImages(productModuleService, medusaProductId, resolvedVariantImageMap, logger)
+          await associateVariantImages(productModuleService, medusaProductId, mapped.variantImageMap, logger)
 
           updated++
           logger.info(`[printify] Updated Medusa product "${pp.title}" (${medusaProductId})`)
@@ -467,8 +390,7 @@ export const syncProductsWorkflow = createWorkflow(
   (input: SyncProductsInput) => {
     const products = fetchAllProductsStep(input)
     const upsertResult = upsertProductsStep({ products, shopId: input.shopId })
-    const imageSyncResult = syncImagesToS3Step({ shopId: input.shopId, _dep: upsertResult })
-    const medusaResult = createMedusaProductsStep({ shopId: input.shopId, _dep: imageSyncResult })
+    const medusaResult = createMedusaProductsStep({ shopId: input.shopId, _upsertDone: upsertResult })
     return new WorkflowResponse(medusaResult)
   }
 )
