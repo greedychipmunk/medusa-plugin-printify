@@ -16,6 +16,7 @@ const PrintifyProduct = model.define("printify_product", {
   //   false = admin force-hidden    (sync will not overwrite is_published)
   visibility_override: model.boolean().nullable(),
   printify_data: model.json().nullable(),
+  image_urls: model.json().nullable(),
 })
 
 export default PrintifyProduct
