@@ -1,8 +1,8 @@
 {
   "name": "medusa-plugin-printify",
   "version": "0.1.0",
-  "description": "A starter for Medusa plugins.",
-  "author": "Medusa (https://medusajs.com)",
+  "description": "Printify print-on-demand integration plugin for Medusa v2",
+  "author": "TrendTri",
   "license": "MIT",
   "files": [
     ".medusa/server"
