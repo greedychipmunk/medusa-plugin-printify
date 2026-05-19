@@ -178,10 +178,11 @@ const createMedusaProductsStep = createStep(
     const productModuleService = container.resolve<IProductModuleService>(Modules.PRODUCT)
     const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
 
-    // Get all published printify products for this shop
+    // Get all printify products for this shop. We need unpublished rows too so
+    // we can demote linked Medusa products to draft. The create-vs-update branch
+    // below skips creating new Medusa products for unpublished rows.
     const printifyProducts = await service.listPrintifyProducts({
       shop_id: shopId,
-      is_published: true,
     })
 
     if (printifyProducts.length === 0) {
@@ -290,6 +291,11 @@ const createMedusaProductsStep = createStep(
       }
 
       if (!medusaProductId) {
+        // Don't create a Medusa product for an unpublished Printify product.
+        // It will be picked up on a later sync once it's published.
+        if (!pp.is_published) {
+          continue
+        }
         // Create a new Medusa product
         try {
           const { result } = await createProductsWorkflow(container).run({

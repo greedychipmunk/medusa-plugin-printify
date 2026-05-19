@@ -84,4 +84,33 @@ describe("syncProductsWorkflow", () => {
   it("no longer hardcodes usd currency_code", () => {
     expect(source).not.toContain('currency_code: "usd"')
   })
+
+  it("does not pre-filter printify_products by is_published when selecting for Medusa sync", () => {
+    // Bug fix: the only loop that updates Medusa product status used to filter
+    // is_published: true, which prevented unpublished products from being demoted
+    // to draft. We now select by shop_id only and branch inside the loop.
+    const stepStart = source.indexOf("printify-create-medusa-products-step")
+    expect(stepStart).toBeGreaterThan(-1)
+    const stepBody = source.substring(stepStart, stepStart + 4000)
+    const listCallMatch = stepBody.match(/listPrintifyProducts\(\{[\s\S]*?\}\)/)
+    expect(listCallMatch).not.toBeNull()
+    expect(listCallMatch![0]).not.toContain("is_published: true")
+    expect(listCallMatch![0]).toContain("shop_id")
+  })
+
+  it("skips creating new Medusa products for unpublished printify_products", () => {
+    // The "create new" branch (no medusaProductId) must early-return when
+    // is_published is false, so we never create Medusa products for drafts.
+    // The "update existing" branch must still run so we can demote.
+    const createBranchStart = source.indexOf("if (!medusaProductId)")
+    expect(createBranchStart).toBeGreaterThan(-1)
+    const createBranchSnippet = source.substring(createBranchStart, createBranchStart + 300)
+    expect(createBranchSnippet).toMatch(/if\s*\(\s*!pp\.is_published\s*\)/)
+  })
+
+  it("demotes existing Medusa products to draft when the printify_product is unpublished", () => {
+    // The update branch already computes targetStatus from pp.is_published —
+    // pin the logic so a future refactor doesn't drop it.
+    expect(source).toContain('pp.is_published ? "published" : "draft"')
+  })
 })
