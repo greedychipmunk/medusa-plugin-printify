@@ -41,10 +41,17 @@ describe("syncProductsWorkflow", () => {
   })
 
   it("ensures sales channel link on update path (not just create)", () => {
-    // The update branch must also reconcile sales channel assignment
-    // so products that lost their channel link get restored on re-sync
+    // The update branch must also reconcile sales channel assignment so
+    // products that lost their channel link get restored on re-sync. The
+    // current mechanism passes sales_channels: [{ id: salesChannelId }] in
+    // the updateProductsWorkflow input, which causes the workflow to
+    // (idempotently) maintain the product↔sales_channel link.
+    //
+    // History: an earlier implementation used an explicit link.create() with
+    // a sales_channel_id payload; the regex below pins the current shape so
+    // a future refactor that drops the link reconciliation gets caught.
     const updateSection = source.substring(source.indexOf("// Update existing"))
-    expect(updateSection).toContain("sales_channel_id")
+    expect(updateSection).toMatch(/sales_channels:\s*\[\{\s*id:\s*salesChannelId\b/)
   })
 
   it("associates variant images after product creation", () => {

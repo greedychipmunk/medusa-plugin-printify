@@ -15,25 +15,38 @@ class MockBase {
   updatePrintifyOrders = jest.fn()
 }
 
-jest.mock("@medusajs/framework/utils", () => ({
-  MedusaService: jest.fn(() => MockBase),
-  model: {
-    define: jest.fn(),
-    id: jest.fn(() => ({ primaryKey: jest.fn().mockReturnThis() })),
-    text: jest.fn(() => ({
-      nullable: jest.fn().mockReturnThis(),
-      unique: jest.fn().mockReturnThis(),
-      default: jest.fn().mockReturnThis(),
-    })),
-    boolean: jest.fn(() => ({ default: jest.fn().mockReturnThis() })),
-    json: jest.fn(() => ({ nullable: jest.fn().mockReturnThis() })),
-    number: jest.fn(() => ({
-      nullable: jest.fn().mockReturnThis(),
-      default: jest.fn().mockReturnThis(),
-    })),
-    dateTime: jest.fn(() => ({ nullable: jest.fn().mockReturnThis() })),
-  },
-}))
+jest.mock("@medusajs/framework/utils", () => {
+  // A single fully-chainable factory: every DML method (text/boolean/json/...)
+  // returns the same shape, exposing every chain method we currently use plus
+  // every one we plausibly will. Adding a new .nullable()/.default()/.unique()
+  // to any model field will not require touching this mock again.
+  //
+  // Defined inside the jest.mock() factory rather than at module scope so the
+  // mock cannot be accidentally broken by a future refactor to a const arrow
+  // (which would not be hoisted ahead of this jest.mock call).
+  //
+  // See AGENTS.md "Coding Conventions — DML nullable fields" for context.
+  function makeDmlChain() {
+    const chain: Record<string, jest.Mock> = {}
+    for (const method of ["nullable", "unique", "default", "primaryKey"]) {
+      chain[method] = jest.fn(() => chain)
+    }
+    return chain
+  }
+
+  return {
+    MedusaService: jest.fn(() => MockBase),
+    model: {
+      define: jest.fn(),
+      id: jest.fn(() => makeDmlChain()),
+      text: jest.fn(() => makeDmlChain()),
+      boolean: jest.fn(() => makeDmlChain()),
+      json: jest.fn(() => makeDmlChain()),
+      number: jest.fn(() => makeDmlChain()),
+      dateTime: jest.fn(() => makeDmlChain()),
+    },
+  }
+})
 
 jest.mock("axios", () => ({
   __esModule: true,
