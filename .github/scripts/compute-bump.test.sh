@@ -63,6 +63,11 @@ assert_bump "wrong case (Fix:) -> empty"   "Fix: capitalized prefix"          ""
 # Body containing the literal string mid-line should NOT trigger (must be at line start)
 assert_bump "mid-line BREAKING -> not major"  "chore: bump"  "Some prose mentioning BREAKING CHANGE: in passing"  ""
 
+# Tighter spec: only a literal space is accepted after the colon (no tab, no CR)
+assert_bump "fix:<TAB> -> empty"           $'fix:\ttyped with tab'            ""  ""
+assert_bump "feat:<TAB> -> empty"          $'feat:\ttyped with tab'           ""  ""
+assert_bump "fix!:<TAB> -> empty"          $'fix!:\ttyped with tab'           ""  ""
+
 echo
 echo "Results: $PASS passed, $FAIL failed"
 if [ "$FAIL" -gt 0 ]; then

@@ -22,7 +22,7 @@ if [ ! -t 0 ]; then
 fi
 
 # Breaking change in title: 'type!: ' or 'type(scope)!: '
-if [[ "$title" =~ ^[a-z]+(\([^\)]+\))?!:[[:space:]] ]]; then
+if [[ "$title" =~ ^[a-z]+(\([^\)]+\))?!:" " ]]; then
     echo "major"
     exit 0
 fi
@@ -34,13 +34,13 @@ if printf '%s\n' "$body" | grep -qE '^BREAKING[ -]CHANGE:'; then
 fi
 
 # Patch: 'fix: ' or 'fix(scope): '
-if [[ "$title" =~ ^fix(\([^\)]+\))?:[[:space:]] ]]; then
+if [[ "$title" =~ ^fix(\([^\)]+\))?:" " ]]; then
     echo "patch"
     exit 0
 fi
 
 # Minor: 'feat: ' or 'feat(scope): '
-if [[ "$title" =~ ^feat(\([^\)]+\))?:[[:space:]] ]]; then
+if [[ "$title" =~ ^feat(\([^\)]+\))?:" " ]]; then
     echo "minor"
     exit 0
 fi
