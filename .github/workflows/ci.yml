@@ -81,12 +81,14 @@ jobs:
           fetch-depth: 0
 
       - name: Check that package.json#version is unchanged
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           # Compare against the merge-base (not BASE_SHA directly) so we only
           # flag changes the PR itself made. Otherwise, if another PR releases
           # while this PR is open and base.sha advances, the version field
           # would appear to have changed even though this PR didn't touch it.
-          MERGE_BASE=$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)
+          MERGE_BASE=$(git merge-base "$PR_BASE_SHA" HEAD)
           BASE_VERSION=$(git show "$MERGE_BASE:package.json" | jq -r .version)
           HEAD_VERSION=$(jq -r .version package.json)
           if [ "$BASE_VERSION" != "$HEAD_VERSION" ]; then

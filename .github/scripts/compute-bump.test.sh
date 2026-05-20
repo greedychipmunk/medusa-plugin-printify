@@ -44,6 +44,9 @@ assert_bump "fix!: -> major"               "fix!: drop legacy field"          ""
 assert_bump "BREAKING CHANGE in body -> major"   "fix: refactor internals"  $'BREAKING CHANGE: removes config flag'   "major"
 assert_bump "BREAKING-CHANGE in body -> major"   "fix: refactor internals"  $'BREAKING-CHANGE: removes config flag'   "major"
 assert_bump "chore + BREAKING body -> major"     "chore: bump"              $'BREAKING CHANGE: caused by upgrade'     "major"
+# Major: any type with ! (the regex matches all types, not just feat/fix)
+assert_bump "chore!: -> major"             "chore!: drop legacy field"        ""  "major"
+assert_bump "docs!: -> major"              "docs!: rename top-level guide"    ""  "major"
 
 # Non-release prefixes
 assert_bump "chore: -> empty"              "chore(deps): bump axios"          ""  ""
@@ -53,6 +56,8 @@ assert_bump "ci: -> empty"                 "ci: tweak workflow"               ""
 assert_bump "refactor: -> empty"           "refactor: extract helper"         ""  ""
 assert_bump "style: -> empty"              "style: format"                    ""  ""
 assert_bump "perf: -> empty"               "perf: cache axios client"         ""  ""
+assert_bump "build: -> empty"              "build: tighten tsconfig"          ""  ""
+assert_bump "revert: -> empty"             "revert: undo PR #42"              ""  ""
 
 # Invalid / no prefix
 assert_bump "no colon -> empty"            "Fix typo in logger"               ""  ""
