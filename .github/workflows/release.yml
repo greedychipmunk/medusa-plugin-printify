@@ -53,8 +53,10 @@ jobs:
       - name: Bump package.json version
         if: steps.bump.outputs.bump != ''
         id: version
+        env:
+          BUMP: ${{ steps.bump.outputs.bump }}
         run: |
-          pnpm version "${{ steps.bump.outputs.bump }}" --no-git-tag-version
+          pnpm version "$BUMP" --no-git-tag-version
           NEW=$(jq -r .version package.json)
           echo "new=$NEW" >> "$GITHUB_OUTPUT"
           echo "New version: $NEW"
@@ -77,19 +79,22 @@ jobs:
 
       - name: Commit bump, tag, and push
         if: steps.bump.outputs.bump != ''
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json
-          git commit -m "chore(release): v${{ steps.version.outputs.new }} [skip ci]"
-          git tag -a "v${{ steps.version.outputs.new }}" -m "v${{ steps.version.outputs.new }}"
+          git commit -m "chore(release): v${NEW_VERSION} [skip ci]"
+          git tag -a "v${NEW_VERSION}" -m "v${NEW_VERSION}"
           git push origin main --follow-tags
 
       - name: Create GitHub Release
         if: steps.bump.outputs.bump != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.version.outputs.new }}
         run: |
-          gh release create "v${{ steps.version.outputs.new }}" \
+          gh release create "v${NEW_VERSION}" \
             --generate-notes \
-            --title "v${{ steps.version.outputs.new }}"
+            --title "v${NEW_VERSION}"
