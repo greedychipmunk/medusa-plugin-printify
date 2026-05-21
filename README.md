@@ -122,6 +122,10 @@ pnpm add medusa-plugin-printify
 
 ### 1. Add environment variables
 
+```bash
+cp .env.template .env
+```
+
 Add the following to your Medusa application's `.env`:
 
 ```bash
