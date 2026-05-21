@@ -350,4 +350,4 @@ See [SECURITY.md](SECURITY.md) for how to report vulnerabilities.
 
 ## License
 
-MIT &copy; Dawson Blackhouse
+Licensed under the [MIT License](https://github.com/greedychipmunk/medusa-plugin-printify/blob/main/LICENSE).
