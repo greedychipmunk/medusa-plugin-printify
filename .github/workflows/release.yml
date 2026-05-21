@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
+
+      - name: Determine bump from PR title
+        id: bump
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          BUMP=$(.github/scripts/compute-bump.sh "$PR_TITLE" <<< "$PR_BODY")
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          if [ -z "$BUMP" ]; then
+            echo "PR title '$PR_TITLE' does not indicate a release. Exiting cleanly."
+          else
+            echo "Bump: $BUMP"
+          fi
+
+      - name: Bump package.json version
+        if: steps.bump.outputs.bump != ''
+        id: version
+        env:
+          BUMP: ${{ steps.bump.outputs.bump }}
+        run: |
+          pnpm version "$BUMP" --no-git-tag-version
+          NEW=$(jq -r .version package.json)
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+          echo "New version: $NEW"
+
+      - name: Install dependencies
+        if: steps.bump.outputs.bump != ''
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        if: steps.bump.outputs.bump != ''
+        run: pnpm test
+
+      - name: Build plugin
+        if: steps.bump.outputs.bump != ''
+        run: pnpm build
+
+      - name: Publish to npm (OIDC)
+        if: steps.bump.outputs.bump != ''
+        run: pnpm publish --access public --provenance --no-git-checks
+
+      - name: Commit bump, tag, and push
+        if: steps.bump.outputs.bump != ''
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(release): v${NEW_VERSION} [skip ci]"
+          git tag -a "v${NEW_VERSION}" -m "v${NEW_VERSION}"
+          git push origin main --follow-tags
+
+      - name: Create GitHub Release
+        if: steps.bump.outputs.bump != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.version.outputs.new }}
+        run: |
+          gh release create "v${NEW_VERSION}" \
+            --generate-notes \
+            --title "v${NEW_VERSION}"

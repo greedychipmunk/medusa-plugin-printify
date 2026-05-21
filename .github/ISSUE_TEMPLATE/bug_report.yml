@@ -1,0 +1,88 @@
+name: Bug report
+description: Report a defect in medusa-plugin-printify.
+title: "bug: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in the fields below so the issue can be triaged quickly.
+
+        **Before opening:** see [CONTRIBUTING.md](https://github.com/greedychipmunk/medusa-plugin-printify/blob/main/CONTRIBUTING.md) for repro expectations and project conventions.
+
+        **Security issues:** do not open a public bug report. See [SECURITY.md](https://github.com/greedychipmunk/medusa-plugin-printify/blob/main/SECURITY.md).
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: Output of `pnpm list medusa-plugin-printify` (or the version in `package.json`).
+      placeholder: "0.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: medusa-version
+    attributes:
+      label: Medusa version
+      description: Output of `pnpm list @medusajs/medusa`.
+      placeholder: "2.13.1"
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      description: Output of `node --version`.
+      placeholder: "v20.11.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear, concise description of the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: A numbered list of steps that reliably reproduce the bug.
+      placeholder: |
+        1. Configure the plugin with options `{...}`
+        2. Run `pnpm medusa db:migrate`
+        3. Call `POST /admin/printify/products`
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant Medusa server logs, stack traces, or webhook payloads. **Redact API keys and webhook secrets.**
+      render: shell
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Anything else that might help — host platform, deployment environment, related Medusa modules, etc.

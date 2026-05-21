@@ -1,9 +1,17 @@
 {
   "name": "medusa-plugin-printify",
-  "version": "0.2.0",
+  "version": "0.1.1",
   "description": "Printify print-on-demand integration plugin for Medusa v2",
-  "author": "TrendTri",
+  "author": "Dawson Blackhouse",
   "license": "MIT",
+  "homepage": "https://github.com/greedychipmunk/medusa-plugin-printify#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/greedychipmunk/medusa-plugin-printify.git"
+  },
+  "bugs": {
+    "url": "https://github.com/greedychipmunk/medusa-plugin-printify/issues"
+  },
   "files": [
     ".medusa/server"
   ],
@@ -22,19 +30,22 @@
   },
   "keywords": [
     "medusa",
-    "plugin",
-    "medusa-plugin-other",
+    "medusa-v2",
     "medusa-plugin",
-    "medusa-v2"
+    "medusa-plugin-other",
+    "printify",
+    "print-on-demand",
+    "pod",
+    "dropshipping",
+    "ecommerce",
+    "fulfillment",
+    "webhooks"
   ],
   "scripts": {
     "build": "medusa plugin:build",
     "dev": "medusa plugin:develop",
     "prepublishOnly": "medusa plugin:build",
     "publish:npm": "pnpm publish --access public --no-git-checks",
-    "release:patch": "pnpm version patch && pnpm publish --access public && git push --follow-tags",
-    "release:minor": "pnpm version minor && pnpm publish --access public && git push --follow-tags",
-    "release:major": "pnpm version major && pnpm publish --access public && git push --follow-tags",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"

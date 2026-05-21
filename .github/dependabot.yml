@@ -1,0 +1,38 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    groups:
+      medusa:
+        patterns:
+          - "@medusajs/*"
+      dev-dependencies:
+        dependency-type: development
+        exclude-patterns:
+          - "@medusajs/*"
+      runtime-dependencies:
+        dependency-type: production
+        exclude-patterns:
+          - "@medusajs/*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    groups:
+      actions:
+        patterns:
+          - "*"
