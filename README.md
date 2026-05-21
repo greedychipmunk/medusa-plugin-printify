@@ -40,11 +40,13 @@
 
 ## Screenshots
 
-> Screenshots coming soon — see [`docs/screenshots/`](docs/screenshots).
+| Printify dashboard | Synced products |
+|---|
+| ![Printify dashboard](docs/screenshots/dashboard.png) | ![Products](docs/screenshots/products.png)
 
-| Printify dashboard | Synced products | Order detail widget |
-|---|---|---|
-| ![Printify dashboard](docs/screenshots/dashboard.png) | ![Products](docs/screenshots/products.png) | ![Order widget](docs/screenshots/order-widget.png) |
+| Order widget | Order details |
+|---|
+| ![Order widget](docs/screenshots/order_widget.png) | ![Order details](docs/screenshots/order_widget_item.png) |
 
 ## Quick start
 
