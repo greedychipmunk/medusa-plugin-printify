@@ -99,6 +99,15 @@ jobs:
         if: steps.bump.outputs.bump != ''
         run: pnpm build
 
+      - name: Upgrade npm for OIDC trusted-publisher auth
+        if: steps.bump.outputs.bump != ''
+        # npm 10.x (bundled with Node 20) signs provenance using OIDC but still
+        # expects a long-lived `_authToken` for the registry PUT, so trusted-
+        # publisher auth fails with 404. OIDC-for-auth landed in npm >= 11.5.1.
+        # `pnpm publish` delegates the PUT to the system npm CLI, so upgrading
+        # npm globally is enough.
+        run: npm install -g npm@latest
+
       - name: Publish to npm (OIDC)
         if: steps.bump.outputs.bump != ''
         run: pnpm publish --access public --provenance --no-git-checks
