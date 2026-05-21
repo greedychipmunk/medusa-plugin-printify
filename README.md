@@ -41,12 +41,12 @@
 ## Screenshots
 
 | Printify dashboard | Synced products |
-|---|
+|---|---|
 | ![Printify dashboard](docs/screenshots/dashboard.png) | ![Products](docs/screenshots/products.png)
 
 | Order widget | Order details |
-|---|
-| ![Order widget](docs/screenshots/order_widget.png) | ![Order details](docs/screenshots/order_widget_item.png) |
+|---|---|
+| ![Order widget](docs/screenshots/order_widget_list.png) | ![Order details](docs/screenshots/order_widget_item.png) |
 
 ## Quick start
 
