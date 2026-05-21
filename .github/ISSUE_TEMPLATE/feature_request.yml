@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest a new feature or improvement.
+title: "feat: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please describe the problem first, then the proposed solution — this makes it easier to discuss alternatives.
+
+        **Before opening:** see [CONTRIBUTING.md](https://github.com/greedychipmunk/medusa-plugin-printify/blob/main/CONTRIBUTING.md) for project conventions.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that the plugin doesn't support today? Concrete examples are appreciated.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How might the plugin solve it? API shape, configuration option, admin UI change, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you've thought about, including doing nothing or handling it outside the plugin.
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Links to Printify API docs, related Medusa modules, or upstream issues.

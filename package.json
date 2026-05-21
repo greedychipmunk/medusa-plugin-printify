@@ -4,6 +4,14 @@
   "description": "Printify print-on-demand integration plugin for Medusa v2",
   "author": "Dawson Blackhouse",
   "license": "MIT",
+  "homepage": "https://github.com/greedychipmunk/medusa-plugin-printify#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/greedychipmunk/medusa-plugin-printify.git"
+  },
+  "bugs": {
+    "url": "https://github.com/greedychipmunk/medusa-plugin-printify/issues"
+  },
   "files": [
     ".medusa/server"
   ],
@@ -22,10 +30,16 @@
   },
   "keywords": [
     "medusa",
-    "plugin",
-    "medusa-plugin-other",
+    "medusa-v2",
     "medusa-plugin",
-    "medusa-v2"
+    "medusa-plugin-other",
+    "printify",
+    "print-on-demand",
+    "pod",
+    "dropshipping",
+    "ecommerce",
+    "fulfillment",
+    "webhooks"
   ],
   "scripts": {
     "build": "medusa plugin:build",

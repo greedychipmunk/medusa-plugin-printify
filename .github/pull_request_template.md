@@ -1,6 +1,8 @@
 ## Summary
 
 <!--
+New here? See [CONTRIBUTING.md](../CONTRIBUTING.md) for setup and PR conventions.
+
 PR title format (drives the auto-release):
   fix:    -> patch release
   feat:   -> minor release

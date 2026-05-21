@@ -1,14 +1,102 @@
-# medusa-plugin-printify
+<h1 align="center">medusa-plugin-printify</h1>
 
-A [Medusa v2](https://medusajs.com) plugin that integrates [Printify](https://printify.com) print-on-demand fulfillment into your store. It syncs Printify products and shops into Medusa, automatically submits orders to Printify for production, handles real-time webhook status updates, and adds a Printify management section to the Medusa Admin dashboard.
+<p align="center">
+  Print-on-demand fulfillment for <a href="https://medusajs.com">Medusa v2</a>, powered by <a href="https://printify.com">Printify</a>.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/medusa-plugin-printify"><img src="https://img.shields.io/npm/v/medusa-plugin-printify.svg" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/medusa-plugin-printify"><img src="https://img.shields.io/npm/dm/medusa-plugin-printify.svg" alt="npm downloads" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="https://github.com/greedychipmunk/medusa-plugin-printify/actions/workflows/ci.yml"><img src="https://github.com/greedychipmunk/medusa-plugin-printify/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://codecov.io/gh/greedychipmunk/medusa-plugin-printify"><img src="https://codecov.io/gh/greedychipmunk/medusa-plugin-printify/branch/main/graph/badge.svg" alt="coverage" /></a>
+  <a href="https://medusajs.com"><img src="https://img.shields.io/badge/Medusa-v2-blueviolet" alt="Medusa v2" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white" alt="TypeScript" /></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#configuration">Configuration</a> ·
+  <a href="#api-reference">API</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
+---
+
+## Why this plugin
+
+- **Real fulfillment, not just sync.** Automatic order submission, real-time webhook status, and a Medusa Admin widget that surfaces production state on every order page.
+- **Type-safe, tested, CI-driven.** TypeScript strict mode, Jest coverage, and OIDC-signed npm releases driven by conventional-commit PR titles.
+- **Decoupled and unopinionated.** No storefront assumptions; works with any Medusa v2 host application.
 
 ## Features
 
-- **Product sync** — pull your Printify catalog into Medusa on a schedule or on-demand
-- **Order fulfillment** — automatically submit Medusa orders to Printify when they are placed
-- **Webhook handling** — receive real-time status updates (shipped, in-production, delivered, etc.)
-- **Admin UI** — manage shops, browse synced products, and monitor order fulfillment status from the Medusa Admin dashboard
-- **Webhook auto-registration** — registers all required Printify webhook topics on startup
+- **Product sync** — pull your Printify catalog into Medusa on a schedule or on-demand.
+- **Order fulfillment** — automatically submit Medusa orders to Printify when they are placed.
+- **Webhook handling** — real-time status updates (shipped, in-production, delivered, etc.).
+- **Admin UI** — manage shops, browse synced products, and monitor order status from the Medusa Admin.
+- **Webhook auto-registration** — registers all required Printify webhook topics on startup.
+
+## Screenshots
+
+> Screenshots coming soon — see [`docs/screenshots/`](docs/screenshots).
+
+| Printify dashboard | Synced products | Order detail widget |
+|---|---|---|
+| ![Printify dashboard](docs/screenshots/dashboard.png) | ![Products](docs/screenshots/products.png) | ![Order widget](docs/screenshots/order-widget.png) |
+
+## Quick start
+
+```bash
+pnpm add medusa-plugin-printify
+```
+
+Add to `medusa-config.ts`:
+
+```ts
+import { defineConfig } from "@medusajs/framework/utils"
+
+export default defineConfig({
+  plugins: [
+    {
+      resolve: "medusa-plugin-printify",
+      options: {
+        apiKey: process.env.PRINTIFY_API_KEY,
+        webhookSecret: process.env.PRINTIFY_WEBHOOK_SECRET,
+        shopId: process.env.PRINTIFY_SHOP_ID,
+        webhookBaseUrl: process.env.PRINTIFY_WEBHOOK_URL,
+      },
+    },
+  ],
+})
+```
+
+Run migrations:
+
+```bash
+pnpm medusa db:migrate
+```
+
+Done. See [Configuration](#configuration) for all options.
+
+---
+
+## Table of contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Local Development](#local-development)
+- [Production Deployment](#production-deployment)
+- [API Reference](#api-reference)
+- [Order Fulfillment Flow](#order-fulfillment-flow)
+- [Admin Dashboard](#admin-dashboard)
+- [Contributing](#contributing)
+- [Security](#security)
+- [License](#license)
+
+---
 
 ## Requirements
 
@@ -103,7 +191,7 @@ This creates the `printify_shop`, `printify_product`, and `printify_order` table
 Clone this repository and install dependencies:
 
 ```bash
-git clone https://github.com/your-org/medusa-plugin-printify
+git clone https://github.com/greedychipmunk/medusa-plugin-printify
 cd medusa-plugin-printify
 pnpm install
 ```
@@ -171,11 +259,9 @@ pnpm test -- --watch   # watch mode
 pnpm build
 ```
 
-### 2. Publish to npm (first time)
+### 2. Publish to npm
 
-```bash
-npm publish
-```
+Releases are handled automatically by `.github/workflows/release.yml` when a PR with a conventional-commit title (`feat:`, `fix:`, or `feat!:`) is merged to `main`. There is no manual `npm publish` step.
 
 ### 3. Install in your Medusa application
 
@@ -235,12 +321,12 @@ All admin routes require authentication. Storefront routes are public.
 
 ## Order Fulfillment Flow
 
-1. A customer places an order in your Medusa storefront
-2. The `order.placed` subscriber detects any line items with `metadata.printify_product_id`
-3. A Printify order is created and submitted to production automatically
-4. Printify sends webhook events as the order moves through production and shipping
-5. The plugin updates the local Printify order record and emits Medusa events for each status change
-6. The Printify order widget on the Medusa Admin order detail page reflects the current status
+1. A customer places an order in your Medusa storefront.
+2. The `order.placed` subscriber detects any line items with `metadata.printify_product_id`.
+3. A Printify order is created and submitted to production automatically.
+4. Printify sends webhook events as the order moves through production and shipping.
+5. The plugin updates the local Printify order record and emits Medusa events for each status change.
+6. The Printify order widget on the Medusa Admin order detail page reflects the current status.
 
 ---
 
@@ -248,6 +334,20 @@ All admin routes require authentication. Storefront routes are public.
 
 The plugin adds two pages and one widget to the Medusa Admin:
 
-- **Printify** (sidebar) — lists synced shops with a one-click sync button
-- **Printify › Products** — browse all synced products with search and a sync button
-- **Order detail widget** — appears below the order details on any order page, showing the linked Printify order status and a manual submit button for pending orders
+- **Printify** (sidebar) — lists synced shops with a one-click sync button.
+- **Printify › Products** — browse all synced products with search and a sync button.
+- **Order detail widget** — appears below the order details on any order page, showing the linked Printify order status and a manual submit button for pending orders.
+
+---
+
+## Contributing
+
+PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup. PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) — the release workflow uses them to bump versions automatically.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for how to report vulnerabilities.
+
+## License
+
+MIT &copy; Dawson Blackhouse
