@@ -6,13 +6,7 @@ A Medusa v2 plugin that enables merchants to manage, display, and sell [Printify
 
 ## Overview
 
-This is a **three-repository** e-commerce platform built on Medusa v2 with a Printify print-on-demand integration:
-
-```
-medusa-plugin-printify/   ← This repo: Custom Medusa plugin for Printify integration
-../trendtri/              ← Medusa v2 backend application (port 9001, Docker)
-../nextjs-trendtri/       ← Next.js storefront (port 8000)
-```
+This plugin is consumed by a Medusa v2 application. See the [Medusa plugin docs](https://docs.medusajs.com/learn/fundamentals/plugins) for how to register and run it inside a host app.
 
 ---
 
