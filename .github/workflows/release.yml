@@ -1,9 +1,8 @@
 name: Release
 
 on:
-  pull_request:
+  push:
     branches: [main]
-    types: [closed]
 
 permissions:
   contents: write
@@ -17,7 +16,6 @@ concurrency:
 jobs:
   release:
     name: release
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     environment: npm-publish
     steps:
@@ -34,11 +32,41 @@ jobs:
           registry-url: https://registry.npmjs.org/
           cache: pnpm
 
+      - name: Look up merged PR for HEAD commit
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Default GITHUB_TOKEN can read PRs in this repo (pull-requests: read).
+          # The /commits/{sha}/pulls endpoint returns all PRs associated with the
+          # commit, regardless of merge style (merge/squash/rebase). We pick the
+          # first merged one. Direct pushes to main return an empty array.
+          PR_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+                       --jq '[.[] | select(.merged_at != null)] | first')
+          if [ "$PR_JSON" = "null" ] || [ -z "$PR_JSON" ]; then
+            echo "No merged PR associated with $GITHUB_SHA. Skipping release."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TITLE=$(echo "$PR_JSON" | jq -r .title)
+          BODY=$(echo "$PR_JSON" | jq -r '.body // ""')
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "title<<__PR_TITLE_EOF__"
+            printf '%s\n' "$TITLE"
+            echo "__PR_TITLE_EOF__"
+            echo "body<<__PR_BODY_EOF__"
+            printf '%s\n' "$BODY"
+            echo "__PR_BODY_EOF__"
+          } >> "$GITHUB_OUTPUT"
+          echo "Found PR: $TITLE"
+
       - name: Determine bump from PR title
         id: bump
+        if: steps.pr.outputs.found == 'true'
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+          PR_BODY: ${{ steps.pr.outputs.body }}
         run: |
           BUMP=$(.github/scripts/compute-bump.sh "$PR_TITLE" <<< "$PR_BODY")
           echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
@@ -80,6 +108,8 @@ jobs:
         env:
           NEW_VERSION: ${{ steps.version.outputs.new }}
         run: |
+          # Push uses the default GITHUB_TOKEN, which does NOT trigger another
+          # workflow run (per GitHub policy), so this is loop-safe.
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json
