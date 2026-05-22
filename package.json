@@ -1,6 +1,6 @@
 {
   "name": "medusa-plugin-printify",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Printify print-on-demand integration plugin for Medusa v2",
   "author": "Dawson Blackhouse",
   "license": "MIT",
@@ -45,7 +45,6 @@
     "build": "medusa plugin:build",
     "dev": "medusa plugin:develop",
     "prepublishOnly": "medusa plugin:build",
-    "publish:npm": "pnpm publish --access public --no-git-checks",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"

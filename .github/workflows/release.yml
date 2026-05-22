@@ -82,10 +82,21 @@ jobs:
         env:
           BUMP: ${{ steps.bump.outputs.bump }}
         run: |
-          pnpm version "$BUMP" --no-git-tag-version
-          NEW=$(jq -r .version package.json)
+          # Compute the next version from the npm registry, not package.json.
+          # The working copy can drift if anything publishes outside this
+          # workflow, and a stale baseline yields a version npm has already
+          # published — which fails with "cannot publish over previously
+          # published versions" and prevents the commit-back step from running.
+          PKG_NAME=$(jq -r .name package.json)
+          CURRENT=$(npm view "$PKG_NAME" version 2>/dev/null || true)
+          if [ -z "$CURRENT" ]; then
+            CURRENT=$(jq -r .version package.json)
+            echo "No npm-published version found; falling back to package.json: $CURRENT"
+          fi
+          NEW=$(npx --yes semver -i "$BUMP" "$CURRENT")
+          pnpm version "$NEW" --no-git-tag-version --allow-same-version
           echo "new=$NEW" >> "$GITHUB_OUTPUT"
-          echo "New version: $NEW"
+          echo "Bumped $CURRENT -> $NEW"
 
       - name: Install dependencies
         if: steps.bump.outputs.bump != ''
