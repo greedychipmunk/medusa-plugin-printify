@@ -134,6 +134,11 @@ jobs:
           # version; the tag on the merge commit is the in-repo record of the
           # release. package.json#version on main is intentionally allowed to
           # lag — nothing reads it.
+          #
+          # `git tag -a` (annotated) embeds a tagger identity, so we still
+          # need user.name / user.email even though no commit is created.
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "v${NEW_VERSION}" -m "v${NEW_VERSION}"
           git push origin "v${NEW_VERSION}"
 
