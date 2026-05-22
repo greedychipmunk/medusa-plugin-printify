@@ -156,60 +156,6 @@ const PrintifyProductDetailPage = () => {
         </Container>
       )}
 
-      {/* Variants */}
-      <Container className="p-6">
-        <Heading level="h2" className="mb-4">
-          Variants ({product.variants?.length ?? 0})
-        </Heading>
-        <Table>
-          <Table.Header>
-            <Table.Row>
-              <Table.HeaderCell>Title</Table.HeaderCell>
-              <Table.HeaderCell>SKU</Table.HeaderCell>
-              <Table.HeaderCell>Cost</Table.HeaderCell>
-              <Table.HeaderCell>Price</Table.HeaderCell>
-              <Table.HeaderCell>Status</Table.HeaderCell>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {(product.variants ?? []).map(v => (
-              <Table.Row key={v.id}>
-                <Table.Cell>{v.title}</Table.Cell>
-                <Table.Cell>
-                  <code className="text-xs">{v.sku}</code>
-                </Table.Cell>
-                <Table.Cell>{formatCents(v.cost)}</Table.Cell>
-                <Table.Cell>{formatCents(v.price)}</Table.Cell>
-                <Table.Cell>
-                  <Badge
-                    color={v.is_enabled ? "green" : "grey"}
-                    size="2xsmall"
-                  >
-                    {v.is_enabled ? "Enabled" : "Disabled"}
-                  </Badge>
-                </Table.Cell>
-              </Table.Row>
-            ))}
-          </Table.Body>
-        </Table>
-      </Container>
-
-      {/* Linked Medusa Product */}
-      <Container className="p-6">
-        <Heading level="h2" className="mb-4">Medusa Product</Heading>
-        {medusaProductId ? (
-          <Link
-            to={`/products/${medusaProductId}`}
-            className="flex items-center gap-2 text-ui-fg-interactive hover:text-ui-fg-interactive-hover text-sm no-underline"
-          >
-            View linked product
-            <ArrowUpRightOnBox className="w-4 h-4" />
-          </Link>
-        ) : (
-          <Text className="text-ui-fg-muted">No linked Medusa product</Text>
-        )}
-      </Container>
-
       {/* Raw JSON */}
       {product.printify_data && (
         <Container className="p-6">
