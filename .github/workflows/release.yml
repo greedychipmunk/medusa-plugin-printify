@@ -123,19 +123,19 @@ jobs:
         if: steps.bump.outputs.bump != ''
         run: pnpm publish --access public --provenance --no-git-checks
 
-      - name: Commit bump, tag, and push
+      - name: Tag release and push tag
         if: steps.bump.outputs.bump != ''
         env:
           NEW_VERSION: ${{ steps.version.outputs.new }}
         run: |
-          # Push uses the default GITHUB_TOKEN, which does NOT trigger another
-          # workflow run (per GitHub policy), so this is loop-safe.
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json
-          git commit -m "chore(release): v${NEW_VERSION} [skip ci]"
+          # Branch protection on main rejects direct pushes from the workflow,
+          # so we don't commit the package.json bump back. The npm registry
+          # (queried in the bump step) is the source of truth for the current
+          # version; the tag on the merge commit is the in-repo record of the
+          # release. package.json#version on main is intentionally allowed to
+          # lag — nothing reads it.
           git tag -a "v${NEW_VERSION}" -m "v${NEW_VERSION}"
-          git push origin main --follow-tags
+          git push origin "v${NEW_VERSION}"
 
       - name: Create GitHub Release
         if: steps.bump.outputs.bump != ''
