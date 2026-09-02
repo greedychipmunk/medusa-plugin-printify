@@ -290,6 +290,32 @@ pnpm test -- path/to/test    # single file
 
 ---
 
+## Release Process
+
+CI owns releases end-to-end. Merge a PR with a Conventional Commit title; the rest is automated.
+
+- **PR title controls the bump.** `fix:` → patch, `feat:` → minor, `type!:` or `BREAKING CHANGE:` footer → major. Other prefixes (`chore:`, `docs:`, etc.) merge with no release. Logic: `.github/scripts/compute-bump.sh`. Allowed prefixes are enforced by the `pr-title-lint` CI job.
+- **Never edit `package.json#version` in a PR.** The `version-field-guard` CI job will reject it. The release workflow queries npm (`npm view`) for the current version — `version` on `main` intentionally lags and nothing reads it.
+- **Main is branch-protected.** The release workflow can push tags but not commits. There are no `chore(release)` commits on `main`; tags point directly at merge commits.
+- **Squash-merge convention.** `gh pr merge <n> --squash --delete-branch`.
+
+### Useful commands
+
+```bash
+gh run view <id> --log-failed                   # diagnose CI failures
+gh pr checks <n> --watch                        # block until PR checks complete
+npm view medusa-plugin-printify version         # current published version
+npm view medusa-plugin-printify time --json     # publish timestamps (correlate with run history)
+```
+
+### Release-workflow gotchas (when editing `.github/workflows/release.yml`)
+
+- `git tag -a` embeds a tagger identity, so it needs `git config user.name`/`user.email` even when no commit is created.
+- `git push --follow-tags` uploads tag-referenced commits even when the branch ref-update is rejected — can leave orphan commits. The workflow pushes tags explicitly and tags `HEAD` directly to avoid this.
+- `gh release create` without `--target` stores `targetCommitish: main` (a branch ref, not a SHA), so retargeting a tag self-heals its linked release.
+
+---
+
 ## Coding Conventions
 
 - **TypeScript** throughout — no `any` without a comment explaining why
