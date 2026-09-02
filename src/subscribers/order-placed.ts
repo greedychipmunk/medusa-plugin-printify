@@ -33,12 +33,8 @@ export default async function orderPlacedHandler({
   }
 
   // Dry-run mode: skip Printify order creation for test orders.
-  // Defaults to true when STRIPE_MODE=test, false otherwise.
-  // Set PRINTIFY_DRY_RUN explicitly to override.
-  const dryRun =
-    process.env.PRINTIFY_DRY_RUN === "true" ||
-    (process.env.PRINTIFY_DRY_RUN === undefined &&
-      process.env.STRIPE_MODE === "test")
+  // Set PRINTIFY_DRY_RUN=true in the staging Infisical environment.
+  const dryRun = process.env.PRINTIFY_DRY_RUN === "true"
 
   if (dryRun) {
     console.info(

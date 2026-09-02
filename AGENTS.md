@@ -79,7 +79,7 @@ Export all workflows from `src/workflows/index.ts` so they're available via the 
 
 Subscribers react to Medusa events (e.g. `order.placed`). Use them to trigger Printify actions in response to commerce events.
 
-The `order.placed` subscriber checks `PRINTIFY_DRY_RUN` (env var) and skips Printify order creation when set to `true`. This defaults to `true` when the host app's `STRIPE_MODE=test`, preventing test orders from creating real Printify orders.
+The `order.placed` subscriber checks `PRINTIFY_DRY_RUN` (env var) and skips Printify order creation when set to `true`. Set this in the staging Infisical environment to prevent test orders from creating real Printify orders.
 
 ```ts
 export default async function handler({ event: { data }, container }) {
@@ -233,7 +233,7 @@ pnpm medusa db:migrate
 |---|---|---|
 | `PRINTIFY_API_KEY` | Yes | Printify personal access token |
 | `PRINTIFY_WEBHOOK_SECRET` | Yes | Secret for verifying Printify webhook signatures |
-| `PRINTIFY_DRY_RUN` | No | When `true`, `order.placed` events skip Printify order creation. Defaults to `true` when `STRIPE_MODE=test`. |
+| `PRINTIFY_DRY_RUN` | No | When `true`, `order.placed` events skip Printify order creation. Set in the staging Infisical environment. |
 | `DB_*` | Dev only | PostgreSQL credentials for generating migrations |
 
 ---

@@ -336,7 +336,7 @@ All admin routes require authentication. Storefront routes are public.
 
 ### Dry Run Mode
 
-Set `PRINTIFY_DRY_RUN=true` to suppress real Printify order creation. This is useful when testing the checkout flow with Stripe test mode — test orders will be placed in Medusa without triggering real Printify fulfillment. The flag defaults to `true` when the host app's `STRIPE_MODE=test`.
+Set `PRINTIFY_DRY_RUN=true` to suppress real Printify order creation. This is useful when testing the checkout flow with Stripe test mode — test orders will be placed in Medusa without triggering real Printify fulfillment. Set this in the staging Infisical environment.
 
 ---
 
