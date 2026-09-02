@@ -329,10 +329,14 @@ All admin routes require authentication. Storefront routes are public.
 
 1. A customer places an order in your Medusa storefront.
 2. The `order.placed` subscriber detects any line items with `metadata.printify_product_id`.
-3. A Printify order is created and submitted to production automatically.
+3. A Printify order is created and submitted to production automatically (skipped when `PRINTIFY_DRY_RUN=true`).
 4. Printify sends webhook events as the order moves through production and shipping.
 5. The plugin updates the local Printify order record and emits Medusa events for each status change.
 6. The Printify order widget on the Medusa Admin order detail page reflects the current status.
+
+### Dry Run Mode
+
+Set `PRINTIFY_DRY_RUN=true` to suppress real Printify order creation. This is useful when testing the checkout flow with Stripe test mode — test orders will be placed in Medusa without triggering real Printify fulfillment. The flag defaults to `true` when the host app's `STRIPE_MODE=test`.
 
 ---
 
