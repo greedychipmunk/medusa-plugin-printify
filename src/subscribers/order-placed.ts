@@ -1,35 +1,58 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework"
+import { Modules } from "@medusajs/framework/utils"
+import { IProductModuleService } from "@medusajs/types"
 import { PRINTIFY_MODULE } from "../modules/printify"
 import PrintifyModuleService from "../modules/printify/service"
 import { createPrintifyOrderWorkflow } from "../workflows/create-printify-order"
 
-type OrderItemMetadata = Record<string, unknown> | null | undefined
+type Metadata = Record<string, unknown> | null | undefined
+
+type OrderLineItem = {
+  variant_id: string | null
+  quantity: number
+  metadata?: Metadata
+  variant?: { metadata?: Metadata } | null
+}
 
 /**
  * Resolve Printify IDs for a line item.
  *
- * Printify IDs live on the *variant* metadata (set by sync-products) —
- * line items do not inherit variant metadata in Medusa v2. Item-level
- * metadata is checked first as a fallback for hosts that set it
- * explicitly at add-to-cart time.
+ * Printify IDs live on VARIANT metadata (set by sync-products). Order
+ * line items do NOT carry variant metadata (the order module's
+ * items.variant relation has no product-module metadata), so the
+ * authoritative source is the product module, looked up by
+ * variant_id. Item-level metadata is checked first as a fallback for
+ * hosts that set it explicitly at add-to-cart time, and the order's
+ * embedded variant metadata (when present) as a second fallback.
  */
-function resolvePrintifyIds(item: {
-  metadata?: OrderItemMetadata
-  variant?: { metadata?: OrderItemMetadata } | null
-}): { productId: string; variantId: number } | null {
+async function resolvePrintifyIds(
+  productService: IProductModuleService,
+  item: OrderLineItem
+): Promise<{ productId: string; variantId: number } | null> {
   const itemMeta = item.metadata ?? {}
-  const variantMeta = item.variant?.metadata ?? {}
+  const embeddedVariantMeta = item.variant?.metadata ?? {}
 
-  const productId =
-    itemMeta.printify_product_id ?? variantMeta.printify_product_id
-  const variantId =
-    itemMeta.printify_variant_id ?? variantMeta.printify_variant_id
+  const fromItem =
+    itemMeta.printify_product_id ?? embeddedVariantMeta.printify_product_id
+  const fromItemVariantId =
+    itemMeta.printify_variant_id ?? embeddedVariantMeta.printify_variant_id
 
-  if (productId == null || variantId == null) return null
-  return {
-    productId: String(productId),
-    variantId: Number(variantId),
+  if (fromItem != null && fromItemVariantId != null) {
+    return { productId: String(fromItem), variantId: Number(fromItemVariantId) }
   }
+
+  if (!item.variant_id) return null
+
+  const variants = await productService.listProductVariants({
+    id: [item.variant_id],
+  })
+  const variantMeta = ((variants[0]?.metadata ?? {}) ?? {}) as Record<string, unknown>
+
+  const productId = variantMeta.printify_product_id
+  const variantId = variantMeta.printify_variant_id
+  if (productId == null || variantId == null) return null
+
+  return { productId: String(productId), variantId: Number(variantId) }
 }
 
 export default async function orderPlacedHandler({
@@ -46,10 +69,11 @@ export default async function orderPlacedHandler({
 
   const orderService = container.resolve("order")
   const order = await orderService.retrieveOrder(data.id, {
-    relations: ["items", "items.variant", "shipping_methods", "shipping_address"],
+    relations: ["items", "shipping_methods", "shipping_address"],
   })
 
-  const items: Array<Record<string, unknown>> = (order.items ?? []) as unknown as Array<Record<string, unknown>>
+  const productService = container.resolve<IProductModuleService>(Modules.PRODUCT)
+  const items = (order.items ?? []) as unknown as OrderLineItem[]
 
   // Only process items that map to a Printify variant
   const printifyItems: Array<{
@@ -58,10 +82,10 @@ export default async function orderPlacedHandler({
     variantId: number
   }> = []
   for (const item of items) {
-    const ids = resolvePrintifyIds(item as never)
+    const ids = await resolvePrintifyIds(productService, item)
     if (ids) {
       printifyItems.push({
-        quantity: item.quantity as number,
+        quantity: item.quantity,
         productId: ids.productId,
         variantId: ids.variantId,
       })
