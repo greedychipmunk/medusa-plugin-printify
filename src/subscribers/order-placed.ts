@@ -3,6 +3,35 @@ import { PRINTIFY_MODULE } from "../modules/printify"
 import PrintifyModuleService from "../modules/printify/service"
 import { createPrintifyOrderWorkflow } from "../workflows/create-printify-order"
 
+type OrderItemMetadata = Record<string, unknown> | null | undefined
+
+/**
+ * Resolve Printify IDs for a line item.
+ *
+ * Printify IDs live on the *variant* metadata (set by sync-products) —
+ * line items do not inherit variant metadata in Medusa v2. Item-level
+ * metadata is checked first as a fallback for hosts that set it
+ * explicitly at add-to-cart time.
+ */
+function resolvePrintifyIds(item: {
+  metadata?: OrderItemMetadata
+  variant?: { metadata?: OrderItemMetadata } | null
+}): { productId: string; variantId: number } | null {
+  const itemMeta = item.metadata ?? {}
+  const variantMeta = item.variant?.metadata ?? {}
+
+  const productId =
+    itemMeta.printify_product_id ?? variantMeta.printify_product_id
+  const variantId =
+    itemMeta.printify_variant_id ?? variantMeta.printify_variant_id
+
+  if (productId == null || variantId == null) return null
+  return {
+    productId: String(productId),
+    variantId: Number(variantId),
+  }
+}
+
 export default async function orderPlacedHandler({
   event: { data },
   container,
@@ -17,18 +46,32 @@ export default async function orderPlacedHandler({
 
   const orderService = container.resolve("order")
   const order = await orderService.retrieveOrder(data.id, {
-    relations: ["items", "shipping_methods", "shipping_address"],
+    relations: ["items", "items.variant", "shipping_methods", "shipping_address"],
   })
 
   const items: Array<Record<string, unknown>> = (order.items ?? []) as unknown as Array<Record<string, unknown>>
 
-  // Only process items that have Printify metadata
-  const printifyItems = items.filter(
-    (item) =>
-      (item.metadata as Record<string, unknown>)?.printify_product_id
-  )
+  // Only process items that map to a Printify variant
+  const printifyItems: Array<{
+    quantity: number
+    productId: string
+    variantId: number
+  }> = []
+  for (const item of items) {
+    const ids = resolvePrintifyIds(item as never)
+    if (ids) {
+      printifyItems.push({
+        quantity: item.quantity as number,
+        productId: ids.productId,
+        variantId: ids.variantId,
+      })
+    }
+  }
 
   if (printifyItems.length === 0) {
+    console.info(
+      `[printify] order-placed: order ${data.id} has no Printify items — not forwarding`
+    )
     return
   }
 
@@ -49,33 +92,44 @@ export default async function orderPlacedHandler({
 
   const addr = (order.shipping_address ?? {}) as Record<string, unknown>
 
-  await createPrintifyOrderWorkflow(container).run({
-    input: {
-      medusaOrderId: order.id as string,
-      shopId,
-      lineItems: printifyItems.map((item) => ({
-        product_id: String((item.metadata as Record<string, unknown>).printify_product_id),
-        variant_id: Number((item.metadata as Record<string, unknown>).printify_variant_id),
-        quantity: item.quantity as number,
-        printify_product_id: String(
-          (item.metadata as Record<string, unknown>).printify_product_id
-        ),
-      })),
-      shippingMethod: Number(shippingMethod),
-      address: {
-        firstName: String(addr.first_name ?? ""),
-        lastName: String(addr.last_name ?? ""),
-        email: String(addr.email ?? order.email ?? ""),
-        phone: String(addr.phone ?? ""),
-        address1: String(addr.address_1 ?? ""),
-        address2: addr.address_2 != null ? String(addr.address_2) : undefined,
-        city: String(addr.city ?? ""),
-        province: String(addr.province ?? ""),
-        postalCode: String(addr.postal_code ?? ""),
-        countryCode: String(addr.country_code ?? ""),
+  console.info(
+    `[printify] order-placed: creating Printify order for ${order.id} ` +
+      `(${printifyItems.length} Printify item(s))`
+  )
+
+  try {
+    await createPrintifyOrderWorkflow(container).run({
+      input: {
+        medusaOrderId: order.id as string,
+        shopId,
+        lineItems: printifyItems.map((item) => ({
+          product_id: item.productId,
+          variant_id: item.variantId,
+          quantity: item.quantity,
+          printify_product_id: item.productId,
+        })),
+        shippingMethod: Number(shippingMethod),
+        address: {
+          firstName: String(addr.first_name ?? ""),
+          lastName: String(addr.last_name ?? ""),
+          email: String(addr.email ?? order.email ?? ""),
+          phone: String(addr.phone ?? ""),
+          address1: String(addr.address_1 ?? ""),
+          address2: addr.address_2 != null ? String(addr.address_2) : undefined,
+          city: String(addr.city ?? ""),
+          province: String(addr.province ?? ""),
+          postalCode: String(addr.postal_code ?? ""),
+          countryCode: String(addr.country_code ?? ""),
+        },
       },
-    },
-  })
+    })
+  } catch (err) {
+    console.error(
+      `[printify] order-placed: FAILED to create Printify order for ${order.id}:`,
+      err
+    )
+    throw err
+  }
 }
 
 export const config: SubscriberConfig = {

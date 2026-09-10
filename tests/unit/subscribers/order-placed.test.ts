@@ -14,15 +14,21 @@ describe("order-placed subscriber", () => {
   let mockOrderService: { retrieveOrder: jest.Mock }
   let mockContainer: { resolve: jest.Mock }
 
+  // Realistic Medusa v2 order: Printify IDs live on VARIANT metadata
+  // (set by sync-products), NOT on line-item metadata.
   const mockOrder = {
     id: "order-1",
     email: "customer@example.com",
     items: [
       {
         quantity: 2,
-        metadata: {
-          printify_product_id: "pp1",
-          printify_variant_id: 42,
+        metadata: {},
+        variant: {
+          id: "variant-1",
+          metadata: {
+            printify_product_id: "pp1",
+            printify_variant_id: 42,
+          },
         },
       },
     ],
@@ -42,6 +48,7 @@ describe("order-placed subscriber", () => {
   }
 
   beforeEach(() => {
+    jest.clearAllMocks()
     mockRun.mockResolvedValue({ result: { localOrderId: "l1", printifyOrderId: "po1" } })
     ;(createPrintifyOrderWorkflow as unknown as jest.Mock).mockReturnValue({ run: mockRun })
 
@@ -64,7 +71,7 @@ describe("order-placed subscriber", () => {
     expect(config.event).toBe("order.placed")
   })
 
-  it("calls createPrintifyOrderWorkflow when order has Printify items", async () => {
+  it("resolves Printify IDs from variant metadata (production shape)", async () => {
     await orderPlacedHandler({
       event: { data: { id: "order-1" } },
       container: mockContainer as never,
@@ -75,6 +82,83 @@ describe("order-placed subscriber", () => {
           medusaOrderId: "order-1",
           shopId: "shop1",
           shippingMethod: 1,
+          lineItems: [
+            expect.objectContaining({
+              product_id: "pp1",
+              variant_id: 42,
+              quantity: 2,
+            }),
+          ],
+        }),
+      })
+    )
+  })
+
+  it("still works with item-level metadata (explicit add-to-cart)", async () => {
+    mockOrderService.retrieveOrder.mockResolvedValue({
+      ...mockOrder,
+      items: [
+        {
+          quantity: 1,
+          metadata: {
+            printify_product_id: "pp2",
+            printify_variant_id: 7,
+          },
+          variant: null,
+        },
+      ],
+    })
+    await orderPlacedHandler({
+      event: { data: { id: "order-1" } },
+      container: mockContainer as never,
+    } as never)
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          lineItems: [
+            expect.objectContaining({
+              product_id: "pp2",
+              variant_id: 7,
+            }),
+          ],
+        }),
+      })
+    )
+  })
+
+  it("forwards only Printify items in a mixed order", async () => {
+    mockOrderService.retrieveOrder.mockResolvedValue({
+      ...mockOrder,
+      items: [
+        {
+          quantity: 2,
+          metadata: {},
+          variant: {
+            id: "variant-1",
+            metadata: { printify_product_id: "pp1", printify_variant_id: 42 },
+          },
+        },
+        {
+          quantity: 1,
+          metadata: {},
+          variant: {
+            id: "variant-2",
+            metadata: {}, // non-Printify product
+          },
+        },
+      ],
+    })
+    await orderPlacedHandler({
+      event: { data: { id: "order-1" } },
+      container: mockContainer as never,
+    } as never)
+    expect(mockRun).toHaveBeenCalledTimes(1)
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          lineItems: [
+            expect.objectContaining({ product_id: "pp1", variant_id: 42, quantity: 2 }),
+          ],
         }),
       })
     )
@@ -89,15 +173,36 @@ describe("order-placed subscriber", () => {
     expect(mockRun).not.toHaveBeenCalled()
   })
 
-  it("skips when order has no Printify items", async () => {
+  it("skips (with log) when order has no Printify items", async () => {
+    const infoSpy = jest.spyOn(console, "info").mockImplementation(() => {})
     mockOrderService.retrieveOrder.mockResolvedValue({
       ...mockOrder,
-      items: [{ quantity: 1, metadata: {} }],
+      items: [{ quantity: 1, metadata: {}, variant: { id: "v", metadata: {} } }],
     })
     await orderPlacedHandler({
       event: { data: { id: "order-1" } },
       container: mockContainer as never,
     } as never)
     expect(mockRun).not.toHaveBeenCalled()
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringContaining("no Printify items")
+    )
+    infoSpy.mockRestore()
+  })
+
+  it("re-throws workflow failures so the event is not silently lost", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {})
+    mockRun.mockRejectedValue(new Error("Printify 500"))
+    await expect(
+      orderPlacedHandler({
+        event: { data: { id: "order-1" } },
+        container: mockContainer as never,
+      } as never)
+    ).rejects.toThrow("Printify 500")
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("FAILED"),
+      expect.any(Error)
+    )
+    errorSpy.mockRestore()
   })
 })
