@@ -7,6 +7,11 @@ jest.mock("../../../src/workflows/create-printify-order", () => ({
   createPrintifyOrderWorkflow: jest.fn(),
 }))
 
+jest.mock("@medusajs/framework/utils", () => ({
+  ...jest.requireActual("@medusajs/framework/utils"),
+  Modules: { ...jest.requireActual("@medusajs/framework/utils").Modules, PRODUCT: "product" },
+}))
+
 const mockRun = jest.fn()
 
 const makeOrder = (id: string, items: unknown[]) => ({
@@ -28,19 +33,18 @@ const makeOrder = (id: string, items: unknown[]) => ({
   },
 })
 
+// Production shape: items carry variant_id only; Printify IDs live on
+// product-module variant metadata.
 const printifyItem = (qty: number) => ({
+  variant_id: "variant-1",
   quantity: qty,
   metadata: {},
-  variant: {
-    id: "variant-1",
-    metadata: { printify_product_id: "pp1", printify_variant_id: 42 },
-  },
 })
 
 const nonPrintifyItem = () => ({
+  variant_id: "variant-2",
   quantity: 1,
   metadata: {},
-  variant: { id: "variant-2", metadata: {} },
 })
 
 describe("reconcile-orders-job", () => {
@@ -49,6 +53,7 @@ describe("reconcile-orders-job", () => {
     listPrintifyOrders: jest.Mock
   }
   let mockOrderService: { listOrders: jest.Mock }
+  let mockProductService: { listProductVariants: jest.Mock }
   let mockContainer: { resolve: jest.Mock }
 
   beforeEach(() => {
@@ -64,10 +69,24 @@ describe("reconcile-orders-job", () => {
     mockOrderService = {
       listOrders: jest.fn().mockResolvedValue([]),
     }
+    mockProductService = {
+      listProductVariants: jest.fn().mockImplementation(({ id }: { id: string[] }) => {
+        if (id.includes("variant-1")) {
+          return [
+            {
+              id: "variant-1",
+              metadata: { printify_product_id: "pp1", printify_variant_id: 42 },
+            },
+          ]
+        }
+        return [{ id: id[0], metadata: {} }]
+      }),
+    }
     mockContainer = {
       resolve: jest.fn().mockImplementation((key: string) => {
         if (key === PRINTIFY_MODULE) return mockService
         if (key === "order") return mockOrderService
+        if (key === "product") return mockProductService
         throw new Error(`Unknown service: ${key}`)
       }),
     }
@@ -87,6 +106,9 @@ describe("reconcile-orders-job", () => {
       makeOrder("order-1", [printifyItem(2)]),
     ])
     await reconcileOrdersJob(mockContainer as never)
+    expect(mockProductService.listProductVariants).toHaveBeenCalledWith({
+      id: ["variant-1"],
+    })
     expect(mockRun).toHaveBeenCalledTimes(1)
     expect(mockRun).toHaveBeenCalledWith(
       expect.objectContaining({

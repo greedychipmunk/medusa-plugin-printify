@@ -7,29 +7,30 @@ jest.mock("../../../src/workflows/create-printify-order", () => ({
   createPrintifyOrderWorkflow: jest.fn(),
 }))
 
+jest.mock("@medusajs/framework/utils", () => ({
+  ...jest.requireActual("@medusajs/framework/utils"),
+  Modules: { ...jest.requireActual("@medusajs/framework/utils").Modules, PRODUCT: "product" },
+}))
+
 const mockRun = jest.fn()
 
 describe("order-placed subscriber", () => {
   let mockService: { getOptions: jest.Mock }
   let mockOrderService: { retrieveOrder: jest.Mock }
+  let mockProductService: { listProductVariants: jest.Mock }
   let mockContainer: { resolve: jest.Mock }
 
-  // Realistic Medusa v2 order: Printify IDs live on VARIANT metadata
-  // (set by sync-products), NOT on line-item metadata.
+  // Realistic Medusa v2 order: line items carry only variant_id.
+  // Printify IDs live on variant metadata in the PRODUCT module —
+  // the order module's items do not carry them.
   const mockOrder = {
     id: "order-1",
     email: "customer@example.com",
     items: [
       {
+        variant_id: "variant-1",
         quantity: 2,
         metadata: {},
-        variant: {
-          id: "variant-1",
-          metadata: {
-            printify_product_id: "pp1",
-            printify_variant_id: 42,
-          },
-        },
       },
     ],
     shipping_methods: [{ data: { printify_shipping_method: 1 } }],
@@ -58,10 +59,19 @@ describe("order-placed subscriber", () => {
     mockOrderService = {
       retrieveOrder: jest.fn().mockResolvedValue(mockOrder),
     }
+    mockProductService = {
+      listProductVariants: jest.fn().mockResolvedValue([
+        {
+          id: "variant-1",
+          metadata: { printify_product_id: "pp1", printify_variant_id: 42 },
+        },
+      ]),
+    }
     mockContainer = {
       resolve: jest.fn().mockImplementation((key: string) => {
         if (key === PRINTIFY_MODULE) return mockService
         if (key === "order") return mockOrderService
+        if (key === "product") return mockProductService
         throw new Error(`Unknown service: ${key}`)
       }),
     }
@@ -71,11 +81,14 @@ describe("order-placed subscriber", () => {
     expect(config.event).toBe("order.placed")
   })
 
-  it("resolves Printify IDs from variant metadata (production shape)", async () => {
+  it("resolves Printify IDs from product-module variant metadata (production shape)", async () => {
     await orderPlacedHandler({
       event: { data: { id: "order-1" } },
       container: mockContainer as never,
     } as never)
+    expect(mockProductService.listProductVariants).toHaveBeenCalledWith({
+      id: ["variant-1"],
+    })
     expect(mockRun).toHaveBeenCalledWith(
       expect.objectContaining({
         input: expect.objectContaining({
@@ -99,12 +112,12 @@ describe("order-placed subscriber", () => {
       ...mockOrder,
       items: [
         {
+          variant_id: "variant-x",
           quantity: 1,
           metadata: {
             printify_product_id: "pp2",
             printify_variant_id: 7,
           },
-          variant: null,
         },
       ],
     })
@@ -112,6 +125,7 @@ describe("order-placed subscriber", () => {
       event: { data: { id: "order-1" } },
       container: mockContainer as never,
     } as never)
+    expect(mockProductService.listProductVariants).not.toHaveBeenCalled()
     expect(mockRun).toHaveBeenCalledWith(
       expect.objectContaining({
         input: expect.objectContaining({
@@ -127,25 +141,24 @@ describe("order-placed subscriber", () => {
   })
 
   it("forwards only Printify items in a mixed order", async () => {
+    mockProductService.listProductVariants.mockImplementation(
+      ({ id }: { id: string[] }) => {
+        if (id.includes("variant-1")) {
+          return [
+            {
+              id: "variant-1",
+              metadata: { printify_product_id: "pp1", printify_variant_id: 42 },
+            },
+          ]
+        }
+        return [{ id: id[0], metadata: {} }] // non-Printify variant
+      }
+    )
     mockOrderService.retrieveOrder.mockResolvedValue({
       ...mockOrder,
       items: [
-        {
-          quantity: 2,
-          metadata: {},
-          variant: {
-            id: "variant-1",
-            metadata: { printify_product_id: "pp1", printify_variant_id: 42 },
-          },
-        },
-        {
-          quantity: 1,
-          metadata: {},
-          variant: {
-            id: "variant-2",
-            metadata: {}, // non-Printify product
-          },
-        },
+        { variant_id: "variant-1", quantity: 2, metadata: {} },
+        { variant_id: "variant-2", quantity: 1, metadata: {} },
       ],
     })
     await orderPlacedHandler({
@@ -175,10 +188,9 @@ describe("order-placed subscriber", () => {
 
   it("skips (with log) when order has no Printify items", async () => {
     const infoSpy = jest.spyOn(console, "info").mockImplementation(() => {})
-    mockOrderService.retrieveOrder.mockResolvedValue({
-      ...mockOrder,
-      items: [{ quantity: 1, metadata: {}, variant: { id: "v", metadata: {} } }],
-    })
+    mockProductService.listProductVariants.mockResolvedValue([
+      { id: "variant-1", metadata: {} },
+    ])
     await orderPlacedHandler({
       event: { data: { id: "order-1" } },
       container: mockContainer as never,

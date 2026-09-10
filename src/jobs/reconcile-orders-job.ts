@@ -1,4 +1,6 @@
 import { MedusaContainer } from "@medusajs/framework/types"
+import { Modules } from "@medusajs/framework/utils"
+import { IProductModuleService } from "@medusajs/types"
 import { PRINTIFY_MODULE } from "../modules/printify"
 import PrintifyModuleService from "../modules/printify/service"
 import { createPrintifyOrderWorkflow } from "../workflows/create-printify-order"
@@ -16,29 +18,48 @@ import { createPrintifyOrderWorkflow } from "../workflows/create-printify-order"
  * already exists, the order is skipped.
  */
 
-type ReconcilableItem = {
+type Metadata = Record<string, unknown> | null | undefined
+
+type OrderLineItem = {
+  variant_id: string | null
   quantity: number
-  productId: string
-  variantId: number
+  metadata?: Metadata
+  variant?: { metadata?: Metadata } | null
 }
 
-function resolvePrintifyIds(item: {
-  metadata?: Record<string, unknown> | null
-  variant?: { metadata?: Record<string, unknown> | null } | null
-}): { productId: string; variantId: number } | null {
+/**
+ * Resolve Printify IDs for a line item. Variant metadata lives in the
+ * product module (order line items don't carry it) — see the
+ * subscriber's resolvePrintifyIds for the full rationale.
+ */
+async function resolvePrintifyIds(
+  productService: IProductModuleService,
+  item: OrderLineItem
+): Promise<{ productId: string; variantId: number } | null> {
   const itemMeta = item.metadata ?? {}
-  const variantMeta = item.variant?.metadata ?? {}
+  const embeddedVariantMeta = item.variant?.metadata ?? {}
 
-  const productId =
-    itemMeta.printify_product_id ?? variantMeta.printify_product_id
-  const variantId =
-    itemMeta.printify_variant_id ?? variantMeta.printify_variant_id
+  const fromItem =
+    itemMeta.printify_product_id ?? embeddedVariantMeta.printify_product_id
+  const fromItemVariantId =
+    itemMeta.printify_variant_id ?? embeddedVariantMeta.printify_variant_id
 
-  if (productId == null || variantId == null) return null
-  return {
-    productId: String(productId),
-    variantId: Number(variantId),
+  if (fromItem != null && fromItemVariantId != null) {
+    return { productId: String(fromItem), variantId: Number(fromItemVariantId) }
   }
+
+  if (!item.variant_id) return null
+
+  const variants = await productService.listProductVariants({
+    id: [item.variant_id],
+  })
+  const variantMeta = ((variants[0]?.metadata ?? {}) ?? {}) as Record<string, unknown>
+
+  const productId = variantMeta.printify_product_id
+  const variantId = variantMeta.printify_variant_id
+  if (productId == null || variantId == null) return null
+
+  return { productId: String(productId), variantId: Number(variantId) }
 }
 
 export default async function reconcileOrdersJob(container: MedusaContainer) {
@@ -59,9 +80,10 @@ export default async function reconcileOrdersJob(container: MedusaContainer) {
   const since = new Date(Date.now() - lookbackHours * 60 * 60 * 1000)
 
   const orderService = container.resolve("order")
+  const productService = container.resolve<IProductModuleService>(Modules.PRODUCT)
   const orders = await orderService.listOrders(
     { created_at: { $gte: since.toISOString() } },
-    { relations: ["items", "items.variant", "shipping_methods", "shipping_address"], order: { created_at: "ASC" }, take: 200 }
+    { relations: ["items", "shipping_methods", "shipping_address"], order: { created_at: "ASC" }, take: 200 }
   )
 
   let checked = 0
@@ -70,12 +92,16 @@ export default async function reconcileOrdersJob(container: MedusaContainer) {
 
   for (const order of orders) {
     // Only orders with at least one Printify item are our responsibility.
-    const printifyItems: ReconcilableItem[] = []
-    for (const item of (order.items ?? []) as never[]) {
-      const ids = resolvePrintifyIds(item)
+    const printifyItems: Array<{
+      quantity: number
+      productId: string
+      variantId: number
+    }> = []
+    for (const item of (order.items ?? []) as unknown as OrderLineItem[]) {
+      const ids = await resolvePrintifyIds(productService, item)
       if (ids) {
         printifyItems.push({
-          quantity: (item as { quantity: number }).quantity,
+          quantity: item.quantity,
           productId: ids.productId,
           variantId: ids.variantId,
         })
