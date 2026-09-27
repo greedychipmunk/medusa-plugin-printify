@@ -362,28 +362,51 @@ const createMedusaProductsStep = createStep(
             )
           }
 
-          // Match incoming Printify options to existing Medusa options by title.
-          // Medusa v2.21 requires the existing option `id` when updating a product's
-          // options — omitting it fails with "Cannot set field 'id' of Product
-          // product option to null".
+          // Medusa v2.21 moved product↔option to a link-table architecture
+          // (product_product_option + per-product value subsets). Updates must
+          // use `option_ids` — a set-difference link/unlink handled by
+          // addProductOptionToProduct. Passing `options` objects instead routes
+          // through MikroORM's own pivot sync, which re-inserts pivot rows
+          // without the `id` PK and fails with "Cannot set field 'id' of
+          // Product product option to null".
           const existingOptionsByTitle = new Map<string, string>()
           for (const opt of existingProduct.options ?? []) {
             existingOptionsByTitle.set(opt.title, opt.id)
           }
-          const optionsWithIds = mapped.medusaOptions.map((opt) => {
-            const existingId = existingOptionsByTitle.get(opt.title)
-            return existingId ? { id: existingId, ...opt } : opt
-          })
 
-          // Medusa v2.21 validates variant options against the current product options
-          // before applying the update. If Printify added new option values (e.g. new colors
-          // or sizes), the variant update fails with "Option value X does not exist for option Y".
-          // Fix: three-phase update:
-          //   1. Update option titles (doesn't touch values)
-          //   2. Create missing option values
-          //   3. Update variants (now all values exist)
+          // Create options Printify has that Medusa doesn't (matched by title),
+          // then build the exact target option-id set for this product.
+          const optionIdByTitle = new Map<string, string>()
+          const targetOptionIds = new Set<string>()
+          const newOptions = mapped.medusaOptions.filter(
+            (opt) => !existingOptionsByTitle.has(opt.title)
+          )
+          if (newOptions.length > 0) {
+            const createdOptions = await productModuleService.createProductOptions(
+              newOptions.map((opt) => ({ title: opt.title, values: opt.values }))
+            )
+            for (const opt of Array.isArray(createdOptions) ? createdOptions : [createdOptions]) {
+              optionIdByTitle.set(opt.title, opt.id)
+              targetOptionIds.add(opt.id)
+            }
+          }
+          for (const opt of mapped.medusaOptions) {
+            const existingId = existingOptionsByTitle.get(opt.title)
+            if (existingId) {
+              optionIdByTitle.set(opt.title, existingId)
+              targetOptionIds.add(existingId)
+            }
+          }
+
+          // Three-phase update:
+          //   1. Scalar fields + option links via option_ids (set-diff based)
+          //   2. Sync per-product value subsets — `add` accepts value objects,
+          //      so Medusa creates missing values on the option AND links them
+          //      into the product's allowed-value subset
+          //   3. Update variants (all links and subsets are in place, so
+          //      variant option validation passes)
           if (hasCompletePricing) {
-            // Phase 1: Update options (title only — updateProductsWorkflow doesn't create values)
+            // Phase 1: scalar fields + option links
             await updateProductsWorkflow(container).run({
               input: {
                 products: [
@@ -394,38 +417,35 @@ const createMedusaProductsStep = createStep(
                     status: targetStatus as any,
                     images: printifyImages.map((img) => ({ url: img.src })),
                     sales_channels: [{ id: salesChannelId }],
-                    options: optionsWithIds.filter((o): o is { id: string; title: string; values: string[] } => "id" in o && !!o.id).map((o) => ({ id: o.id, title: o.title })),
-                  },
+                    option_ids: [...targetOptionIds],
+                  } as any,
                 ],
               },
             })
 
-            // Phase 2: Create missing option values
-            const existingOptionValues = new Map<string, Set<string>>()
-            for (const opt of existingProduct.options ?? []) {
-              const values = new Set<string>()
-              for (const val of opt.values ?? []) {
-                values.add(val.value)
-              }
-              existingOptionValues.set(opt.id, values)
+            // Phase 2: sync per-product value subsets (creates missing option
+            // values and links them into the subset variant validation enforces)
+            const valueUpdates = mapped.medusaOptions
+              .map((opt) => {
+                const optionId = optionIdByTitle.get(opt.title)
+                if (!optionId) return null
+                return {
+                  product_id: medusaProductId,
+                  product_option_id: optionId,
+                  add: opt.values.map((v) => ({ value: v })),
+                }
+              })
+              .filter(
+                (u): u is { product_id: string; product_option_id: string; add: { value: string }[] } =>
+                  u !== null
+              )
+            if (valueUpdates.length > 0) {
+              // updateProductOptionValuesOnProduct is a Medusa 2.21 module API
+              // not present in the plugin's compile-time types
+              await (productModuleService as any).updateProductOptionValuesOnProduct(valueUpdates)
             }
 
-            const optionValuesToCreate: { option_id: string; value: string }[] = []
-          for (const opt of optionsWithIds) {
-            if (!("id" in opt) || !opt.id) continue
-            const existingValues = existingOptionValues.get(opt.id) ?? new Set()
-            for (const val of opt.values ?? []) {
-              if (!existingValues.has(val)) {
-                optionValuesToCreate.push({ option_id: opt.id, value: val })
-              }
-            }
-          }
-
-            if (optionValuesToCreate.length > 0) {
-              await productModuleService.createProductOptionValues(optionValuesToCreate)
-            }
-
-            // Phase 3: Update variants (now all option values exist)
+            // Phase 3: update variants
             await updateProductsWorkflow(container).run({
               input: {
                 products: [
