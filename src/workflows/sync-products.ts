@@ -345,7 +345,7 @@ const createMedusaProductsStep = createStep(
           // Build a map of existing Medusa variant IDs keyed by Printify variant ID
           // so updateProducts can match existing variants instead of trying to create duplicates
           const existingProduct = await productModuleService.retrieveProduct(medusaProductId, {
-            relations: ["variants"],
+            relations: ["variants", "options"],
           })
           const existingVariantIdMap = new Map<number, string>()
           for (const variant of existingProduct.variants ?? []) {
@@ -361,6 +361,19 @@ const createMedusaProductsStep = createStep(
               `[printify] Skipping variant/price update for "${pp.title}" — exchange rates unavailable, preserving existing multi-currency prices`
             )
           }
+
+          // Match incoming Printify options to existing Medusa options by title.
+          // Medusa v2.21 requires the existing option `id` when updating a product's
+          // options — omitting it fails with "Cannot set field 'id' of Product
+          // product option to null".
+          const existingOptionsByTitle = new Map<string, string>()
+          for (const opt of existingProduct.options ?? []) {
+            existingOptionsByTitle.set(opt.title, opt.id)
+          }
+          const optionsWithIds = mapped.medusaOptions.map((opt) => {
+            const existingId = existingOptionsByTitle.get(opt.title)
+            return existingId ? { id: existingId, ...opt } : opt
+          })
 
           // Medusa v2.21 validates variant options against the current product options
           // before applying the update. If Printify added new option values (e.g. new colors
@@ -378,7 +391,7 @@ const createMedusaProductsStep = createStep(
                     status: targetStatus as any,
                     images: printifyImages.map((img) => ({ url: img.src })),
                     sales_channels: [{ id: salesChannelId }],
-                    options: mapped.medusaOptions,
+                    options: optionsWithIds,
                   },
                 ],
               },
