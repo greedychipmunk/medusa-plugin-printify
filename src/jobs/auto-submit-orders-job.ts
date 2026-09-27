@@ -25,7 +25,14 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
       // current state (e.g. it was already canceled on Printify's side).
       // Retrying forever is pointless — sync the real status from Printify
       // so the order leaves the pending queue instead of erroring every run.
-      if (order.printify_id && err instanceof Error && err.message.includes('"code":8502')) {
+      // Note: Medusa's workflow engine re-throws step errors as plain
+      // serialized objects ({ message, name, stack }) — NOT Error instances —
+      // so don't rely on instanceof; extract the message defensively.
+      const message =
+        err instanceof Error
+          ? err.message
+          : String((err as { message?: unknown })?.message ?? err)
+      if (order.printify_id && message.includes('"code":8502')) {
         try {
           const remote = await service.getApiClient().getOrder(shopId, order.printify_id as string)
           await service.updatePrintifyOrders(
