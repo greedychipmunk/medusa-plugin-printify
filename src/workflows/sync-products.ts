@@ -362,26 +362,56 @@ const createMedusaProductsStep = createStep(
             )
           }
 
-          await updateProductsWorkflow(container).run({
-            input: {
-              products: [
-                {
-                  id: medusaProductId,
-                  title: pp.title,
-                  description: pp.description || undefined,
-                  status: targetStatus as any,
-                  images: printifyImages.map((img) => ({ url: img.src })),
-                  sales_channels: [{ id: salesChannelId }],
-                  ...(hasCompletePricing
-                    ? {
-                        options: mapped.medusaOptions,
-                        variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id, activeCurrencies, rates, existingVariantIdMap),
-                      }
-                    : {}),
-                },
-              ],
-            },
-          })
+          // Medusa v2.21 validates variant options against the current product options
+          // before applying the update. If Printify added new option values (e.g. new colors
+          // or sizes), the variant update fails with "Option value X does not exist for option Y".
+          // Fix: two-phase update — first update options, then update variants.
+          if (hasCompletePricing) {
+            // Phase 1: Update options (adds new values to product options)
+            await updateProductsWorkflow(container).run({
+              input: {
+                products: [
+                  {
+                    id: medusaProductId,
+                    title: pp.title,
+                    description: pp.description || undefined,
+                    status: targetStatus as any,
+                    images: printifyImages.map((img) => ({ url: img.src })),
+                    sales_channels: [{ id: salesChannelId }],
+                    options: mapped.medusaOptions,
+                  },
+                ],
+              },
+            })
+
+            // Phase 2: Update variants (now new option values exist)
+            await updateProductsWorkflow(container).run({
+              input: {
+                products: [
+                  {
+                    id: medusaProductId,
+                    variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id, activeCurrencies, rates, existingVariantIdMap),
+                  },
+                ],
+              },
+            })
+          } else {
+            // No pricing data — only update metadata fields
+            await updateProductsWorkflow(container).run({
+              input: {
+                products: [
+                  {
+                    id: medusaProductId,
+                    title: pp.title,
+                    description: pp.description || undefined,
+                    status: targetStatus as any,
+                    images: printifyImages.map((img) => ({ url: img.src })),
+                    sales_channels: [{ id: salesChannelId }],
+                  },
+                ],
+              },
+            })
+          }
 
           await associateVariantImages(productModuleService, medusaProductId, mapped.variantImageMap, logger)
 
