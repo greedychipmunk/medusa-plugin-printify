@@ -3,6 +3,7 @@ export type PrintifyModuleOptions = {
   webhookSecret: string
   shopId?: string
   webhookBaseUrl?: string
+  storefrontBaseUrl?: string
   enableNotifications?: boolean
   notificationEmail?: string
 }

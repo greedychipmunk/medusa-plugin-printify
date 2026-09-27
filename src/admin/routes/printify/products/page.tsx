@@ -9,6 +9,7 @@ type PrintifyProduct = {
   printify_id: string
   title: string
   is_published: boolean
+  printify_data?: { is_locked?: boolean; visible?: boolean } | null
   variants: { id: number; title: string; cost: number }[]
   images: PrintifyImage[]
 }
@@ -72,6 +73,12 @@ const PrintifyProductsPage = () => {
     const img = images?.find(i => i.is_default) ?? images?.[0]
     return img?.src ?? null
   }
+
+  // A locked product is mid-publish-handshake on Printify's side. For
+  // custom_integration shops it stays locked until this plugin acknowledges
+  // the publish — surface it so the stuck state is visible in Medusa admin.
+  const isPublishing = (product: PrintifyProduct) =>
+    product.printify_data?.is_locked === true && product.printify_data?.visible !== false
 
   return (
     <Container className="p-8">
@@ -142,8 +149,11 @@ const PrintifyProductsPage = () => {
               </Table.Cell>
               <Table.Cell>
                 <Link to={`/printify/products/${product.id}`} className="block no-underline">
-                  <Badge color={product.is_published ? "green" : "grey"} size="2xsmall">
-                    {product.is_published ? "Published" : "Draft"}
+                  <Badge
+                    color={isPublishing(product) ? "orange" : product.is_published ? "green" : "grey"}
+                    size="2xsmall"
+                  >
+                    {isPublishing(product) ? "Publishing" : product.is_published ? "Published" : "Draft"}
                   </Badge>
                 </Link>
               </Table.Cell>

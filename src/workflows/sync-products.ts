@@ -52,7 +52,13 @@ const upsertProductsStep = createStep(
 
     for (const product of products) {
       const existing = await service.listPrintifyProducts({ printify_id: String(product.id) })
-      const printifyPublished = product.visible && !product.is_locked
+      // NOTE: is_locked means a publish handshake is in progress on Printify's
+      // side. For custom_integration shops the product stays locked until this
+      // plugin acknowledges via publishing_succeeded/publishing_failed — so a
+      // locked+visible product must be treated as published. Otherwise the
+      // Medusa product is never created and the handshake can never complete
+      // (products stuck in "Publishing" forever).
+      const printifyPublished = product.visible
       // visibility_override is null until an admin manually sets it;
       // MikroORM returns null (never undefined) for nullable boolean columns
       const shouldUpdateVisibility =

@@ -100,6 +100,36 @@ describe("PrintifyApiClient", () => {
     expect(result).toEqual({ id: "p1", title: "Test" })
   })
 
+  it("publishProduct posts to publish endpoint", async () => {
+    const client = new PrintifyApiClient("key")
+    mockPost.mockResolvedValue({ data: {} })
+    await client.publishProduct("shop1", "p1")
+    expect(mockPost).toHaveBeenCalledWith("/shops/shop1/products/p1/publish.json", {})
+  })
+
+  it("setPublishSucceeded posts external reference to publishing_succeeded endpoint", async () => {
+    const client = new PrintifyApiClient("key")
+    mockPost.mockResolvedValue({ data: {} })
+    await client.setPublishSucceeded("shop1", "p1", {
+      id: "prod_123",
+      handle: "https://store.com/products/chess-hoodie",
+    })
+    expect(mockPost).toHaveBeenCalledWith(
+      "/shops/shop1/products/p1/publishing_succeeded.json",
+      { external: { id: "prod_123", handle: "https://store.com/products/chess-hoodie" } }
+    )
+  })
+
+  it("setPublishFailed posts reason to publishing_failed endpoint", async () => {
+    const client = new PrintifyApiClient("key")
+    mockPost.mockResolvedValue({ data: {} })
+    await client.setPublishFailed("shop1", "p1", "Request timed out")
+    expect(mockPost).toHaveBeenCalledWith(
+      "/shops/shop1/products/p1/publishing_failed.json",
+      { reason: "Request timed out" }
+    )
+  })
+
   it("createOrder posts payload to correct endpoint", async () => {
     const client = new PrintifyApiClient("key")
     const payload = {
