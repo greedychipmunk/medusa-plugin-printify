@@ -76,8 +76,7 @@ describe("auto-submit-orders-job", () => {
 
     expect(getOrder).toHaveBeenCalledWith("shop1", "printify-1")
     expect(mockService.updatePrintifyOrders).toHaveBeenCalledWith(
-      { id: "stuck-order" },
-      { status: "canceled" }
+      { selector: { id: "stuck-order" }, data: { status: "canceled" } }
     )
   })
 
@@ -97,8 +96,7 @@ describe("auto-submit-orders-job", () => {
 
     expect(getOrder).toHaveBeenCalledWith("shop1", "printify-1")
     expect(mockService.updatePrintifyOrders).toHaveBeenCalledWith(
-      { id: "stuck-order" },
-      { status: "canceled" }
+      { selector: { id: "stuck-order" }, data: { status: "canceled" } }
     )
   })
 

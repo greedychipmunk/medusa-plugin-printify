@@ -35,10 +35,13 @@ export default async function autoSubmitOrdersJob(container: MedusaContainer) {
       if (order.printify_id && message.includes('"code":8502')) {
         try {
           const remote = await service.getApiClient().getOrder(shopId, order.printify_id as string)
-          await service.updatePrintifyOrders(
-            { id: order.id as string },
-            { status: remote.status }
-          )
+          // NOTE: the two-argument form updatePrintifyOrders({id}, {status})
+          // resolves silently WITHOUT persisting on Medusa 2.21 — only the
+          // { selector, data } shape writes. (Verified in production.)
+          await service.updatePrintifyOrders({
+            selector: { id: order.id as string },
+            data: { status: remote.status },
+          })
           console.warn(
             `[printify] auto-submit-orders-job: order ${order.id as string} not submittable ` +
               `(Printify status: ${remote.status}) — synced status, skipping further retries`
