@@ -64,11 +64,34 @@ describe("auto-submit-orders-job", () => {
     mockService.listPrintifyOrders.mockResolvedValue([
       { id: "stuck-order", printify_id: "printify-1" },
     ])
+    // Medusa's workflow engine re-throws step errors as plain serialized
+    // objects, not Error instances — mirror that real-world shape.
     mockRun.mockRejectedValue(
       new Error(
         `Printify API error 400: {"status":"error","code":8502,"message":"Operation failed.","errors":{"reason":"It is not allowed to sent order \\"26547087.1\\" to production with status canceled.","code":8502}}`
       )
     )
+
+    await autoSubmitOrdersJob(mockContainer as never)
+
+    expect(getOrder).toHaveBeenCalledWith("shop1", "printify-1")
+    expect(mockService.updatePrintifyOrders).toHaveBeenCalledWith(
+      { id: "stuck-order" },
+      { status: "canceled" }
+    )
+  })
+
+  it("handles 8502 when the workflow error is a plain serialized object (not an Error)", async () => {
+    const getOrder = jest.fn().mockResolvedValue({ id: "p1", status: "canceled" })
+    mockService.getApiClient.mockReturnValue({ getOrder })
+    mockService.listPrintifyOrders.mockResolvedValue([
+      { id: "stuck-order", printify_id: "printify-1" },
+    ])
+    mockRun.mockRejectedValue({
+      name: "Error",
+      message: `Printify API error 400: {"status":"error","code":8502,"message":"Operation failed.","errors":{"reason":"It is not allowed to sent order \\"26547087.1\\" to production with status canceled.","code":8502}}`,
+      stack: "Error: Printify API error 400: ...",
+    })
 
     await autoSubmitOrdersJob(mockContainer as never)
 
