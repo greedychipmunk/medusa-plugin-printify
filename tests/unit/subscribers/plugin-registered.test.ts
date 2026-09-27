@@ -73,4 +73,23 @@ describe("registerWebhooksHandler", () => {
 
     expect(mockCreateWebhook).not.toHaveBeenCalled()
   })
+
+  it("continues registering remaining topics when one fails", async () => {
+    // A single Printify validation rejection (e.g. unsupported topic for the
+    // shop's sales channel) must not abort the loop — previously it left the
+    // shop with NO webhooks registered at all.
+    mockGetOptions.mockReturnValue({
+      shopId: "shop1",
+      webhookBaseUrl: "https://example.com",
+    })
+    mockGetWebhooks.mockResolvedValue([])
+    mockCreateWebhook
+      .mockRejectedValueOnce(new Error("Printify API error 9004"))
+      .mockResolvedValue({})
+
+    await registerWebhooksHandler({ container: mockContainer } as any)
+
+    // All 8 topics attempted (the loop doesn't bail), 7 succeed
+    expect(mockCreateWebhook).toHaveBeenCalledTimes(8)
+  })
 })

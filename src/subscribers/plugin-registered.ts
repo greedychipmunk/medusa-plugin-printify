@@ -33,8 +33,15 @@ export default async function registerWebhooksHandler({
 
   for (const topic of WEBHOOK_TOPICS) {
     if (!existingTopics.includes(topic)) {
-      await client.createWebhook(shopId, topic, webhookUrl)
-      console.log(`[printify] registered webhook: ${topic}`)
+      try {
+        await client.createWebhook(shopId, topic, webhookUrl)
+        console.log(`[printify] registered webhook: ${topic}`)
+      } catch (err) {
+        // One rejected topic must not abort the whole loop — a single
+        // Printify validation failure (e.g. topic not supported for the
+        // shop's sales channel) previously left the shop with NO webhooks.
+        console.warn(`[printify] failed to register webhook topic "${topic}": ${err}`)
+      }
     }
   }
 }
