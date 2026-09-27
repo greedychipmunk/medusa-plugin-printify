@@ -378,9 +378,12 @@ const createMedusaProductsStep = createStep(
           // Medusa v2.21 validates variant options against the current product options
           // before applying the update. If Printify added new option values (e.g. new colors
           // or sizes), the variant update fails with "Option value X does not exist for option Y".
-          // Fix: two-phase update — first update options, then update variants.
+          // Fix: three-phase update:
+          //   1. Update option titles (doesn't touch values)
+          //   2. Create missing option values
+          //   3. Update variants (now all values exist)
           if (hasCompletePricing) {
-            // Phase 1: Update options (adds new values to product options)
+            // Phase 1: Update options (title only — updateProductsWorkflow doesn't create values)
             await updateProductsWorkflow(container).run({
               input: {
                 products: [
@@ -391,13 +394,38 @@ const createMedusaProductsStep = createStep(
                     status: targetStatus as any,
                     images: printifyImages.map((img) => ({ url: img.src })),
                     sales_channels: [{ id: salesChannelId }],
-                    options: optionsWithIds,
+                    options: optionsWithIds.filter((o): o is { id: string; title: string; values: string[] } => "id" in o && !!o.id).map((o) => ({ id: o.id, title: o.title })),
                   },
                 ],
               },
             })
 
-            // Phase 2: Update variants (now new option values exist)
+            // Phase 2: Create missing option values
+            const existingOptionValues = new Map<string, Set<string>>()
+            for (const opt of existingProduct.options ?? []) {
+              const values = new Set<string>()
+              for (const val of opt.values ?? []) {
+                values.add(val.value)
+              }
+              existingOptionValues.set(opt.id, values)
+            }
+
+            const optionValuesToCreate: { option_id: string; value: string }[] = []
+          for (const opt of optionsWithIds) {
+            if (!("id" in opt) || !opt.id) continue
+            const existingValues = existingOptionValues.get(opt.id) ?? new Set()
+            for (const val of opt.values ?? []) {
+              if (!existingValues.has(val)) {
+                optionValuesToCreate.push({ option_id: opt.id, value: val })
+              }
+            }
+          }
+
+            if (optionValuesToCreate.length > 0) {
+              await productModuleService.createProductOptionValues(optionValuesToCreate)
+            }
+
+            // Phase 3: Update variants (now all option values exist)
             await updateProductsWorkflow(container).run({
               input: {
                 products: [
