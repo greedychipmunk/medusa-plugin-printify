@@ -170,6 +170,7 @@ All available options:
 | `webhookSecret` | `string` | Yes | Secret used to verify webhook signatures |
 | `shopId` | `string` | No | Printify shop ID — required for order submission and webhook registration |
 | `webhookBaseUrl` | `string` | No | Base URL of your Medusa server (e.g. `https://api.mystore.com`) — required for webhook registration |
+| `storefrontBaseUrl` | `string` | No | Base URL of your storefront (e.g. `https://mystore.com`) — used for the publish-handshake external handle; falls back to `webhookBaseUrl` |
 | `enableNotifications` | `boolean` | No | Emit Medusa notification events for Printify order status changes |
 | `notificationEmail` | `string` | No | Email address to receive Printify fulfillment notifications |
 
@@ -321,7 +322,23 @@ All admin routes require authentication. Storefront routes are public.
 |---|---|---|
 | `POST` | `/webhooks/printify` | Receives Printify webhook events |
 
-**Handled events:** `order:status-changed`, `order:shipped`, `order:sent-to-production`, `order:shipment:delivered`, `product:updated`, `product:deleted`, `shop:disconnected`
+**Handled events:** `order:status-changed`, `order:shipped`, `order:sent-to-production`, `order:shipment:delivered`, `product:updated`, `product:deleted`, `product:publish:started`, `shop:disconnected`
+
+### Publish handshake (custom integration shops)
+
+For shops connected via a **custom integration** sales channel, Printify locks a product when a publish is initiated and waits for the integration to mirror the product and acknowledge the publish. This plugin completes that handshake automatically:
+
+1. Printify emits `product:publish:started` and locks the product.
+2. The plugin syncs the product into Medusa (published, on the storefront).
+3. The plugin calls Printify's `publishing_succeeded` with the Medusa product id and storefront URL — which unlocks the product.
+
+If the sync fails, the plugin reports `publishing_failed` with the reason so the product unlocks and the error is visible in Printify.
+
+If products were created before this handshake existed, they may be stuck in "Publishing" (locked). To reconcile them:
+
+```bash
+pnpm medusa exec ./node_modules/medusa-plugin-printify/dist/scripts/reconcile-publishing.js
+```
 
 ---
 

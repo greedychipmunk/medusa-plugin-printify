@@ -9,6 +9,7 @@ const WEBHOOK_TOPICS = [
   "order:shipment:delivered",
   "product:updated",
   "product:deleted",
+  "product:publish:started",
   "shop:disconnected",
 ]
 

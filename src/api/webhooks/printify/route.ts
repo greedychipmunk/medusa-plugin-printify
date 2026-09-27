@@ -46,6 +46,10 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
         await handleProductEvent(body, service, req.scope)
         break
 
+      case "product:publish:started":
+        await handleProductPublishStarted(body, service, req.scope)
+        break
+
       case "shop:disconnected":
         await handleShopDisconnected(body, service)
         break
@@ -120,6 +124,89 @@ async function handleProductEvent(
     })
   } catch (err) {
     console.error(`[printify] webhook: failed to sync after product:updated: ${err}`)
+  }
+}
+
+/**
+ * product:publish:started — Printify locked the product and is waiting for
+ * this integration to mirror it to its storefront and acknowledge the publish.
+ * For custom_integration shops this handshake is the ONLY thing that unlocks
+ * the product; without it, products stay in "Publishing" forever.
+ *
+ * Flow: sync (creates/updates the linked Medusa product) → look up the
+ * Medusa product id + handle → report publishing_succeeded with the
+ * storefront URL. On any failure, report publishing_failed so the product
+ * unlocks and the merchant sees the reason in Printify.
+ */
+async function handleProductPublishStarted(
+  body: PrintifyWebhookBody,
+  service: PrintifyModuleService,
+  container: MedusaContainer
+) {
+  const printifyProductId = String(body.resource.id)
+  const action = (body.resource.data?.action as string) ?? "create"
+
+  if (action === "delete") {
+    // Unpublish handshake — no acknowledgement needed. Storefront cleanup is
+    // handled by product:deleted / the sync workflow demoting the product.
+    console.log(`[printify] webhook: product unpublish started: ${printifyProductId} — no action needed`)
+    return
+  }
+
+  console.log(`[printify] webhook: product publish started: ${printifyProductId}, completing handshake`)
+
+  const client = service.getApiClient()
+  const options = service.getOptions()
+  const shopId = body.shop_id || options.shopId
+
+  if (!shopId) {
+    console.error(`[printify] webhook: cannot complete publish handshake without a shop id`)
+    return
+  }
+
+  try {
+    // Sync so the linked Medusa product exists and is published
+    await syncProductsWorkflow(container).run({
+      input: { shopId },
+    })
+
+    // Look up the linked Medusa product for its id and storefront handle
+    const query = container.resolve(ContainerRegistrationKeys.QUERY)
+    const { data } = await query.graph({
+      entity: "printify_product",
+      fields: ["product.id", "product.handle"],
+      filters: { printify_id: printifyProductId },
+    })
+    const medusaProduct = data[0]?.product
+    if (!medusaProduct?.id || !medusaProduct?.handle) {
+      throw new Error(
+        `no linked Medusa product for printify_id ${printifyProductId} after sync — ` +
+        `check that the product has enabled variants and a sales channel is configured`
+      )
+    }
+
+    // Storefront URL for the external reference. storefrontBaseUrl is the
+    // canonical option; fall back to webhookBaseUrl (same domain in most
+    // deployments since the storefront and API share the host).
+    const base = (options.storefrontBaseUrl ?? options.webhookBaseUrl ?? "")
+      .replace(/\/+$/, "")
+    const handle = `${base}/products/${medusaProduct.handle}`
+
+    await client.setPublishSucceeded(shopId, printifyProductId, {
+      id: medusaProduct.id,
+      handle,
+    })
+    console.log(`[printify] webhook: publish handshake completed for ${printifyProductId} → ${handle}`)
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    console.error(`[printify] webhook: publish handshake failed for ${printifyProductId}: ${reason}`)
+    try {
+      await client.setPublishFailed(shopId, printifyProductId, reason)
+    } catch (failErr) {
+      console.error(
+        `[printify] webhook: failed to report publish failure to Printify for ${printifyProductId}: ${failErr}`
+      )
+    }
   }
 }
 

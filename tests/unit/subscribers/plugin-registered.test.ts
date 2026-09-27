@@ -49,7 +49,7 @@ describe("registerWebhooksHandler", () => {
 
     expect(mockGetWebhooks).toHaveBeenCalledWith("shop1")
     expect(mockCreateWebhook).not.toHaveBeenCalledWith("shop1", "order:shipped", expect.any(String))
-    expect(mockCreateWebhook).toHaveBeenCalledTimes(6)
+    expect(mockCreateWebhook).toHaveBeenCalledTimes(7)
     expect(mockCreateWebhook).toHaveBeenCalledWith(
       "shop1",
       "order:status-changed",
@@ -60,7 +60,8 @@ describe("registerWebhooksHandler", () => {
   it("does not create webhooks that already exist", async () => {
     const allTopics = [
       "order:status-changed", "order:shipped", "order:sent-to-production",
-      "order:shipment:delivered", "product:updated", "product:deleted", "shop:disconnected",
+      "order:shipment:delivered", "product:updated", "product:deleted",
+      "product:publish:started", "shop:disconnected",
     ]
     mockGetOptions.mockReturnValue({
       shopId: "shop1",

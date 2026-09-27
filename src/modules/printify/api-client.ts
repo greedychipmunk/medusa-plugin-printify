@@ -143,6 +143,18 @@ export class PrintifyApiClient {
     return data
   }
 
+  async publishProduct(shopId: string, productId: string, payload?: Record<string, boolean>): Promise<void> {
+    await this.client.post(`/shops/${shopId}/products/${productId}/publish.json`, payload ?? {})
+  }
+
+  async setPublishSucceeded(shopId: string, productId: string, external: { id: string; handle: string }): Promise<void> {
+    await this.client.post(`/shops/${shopId}/products/${productId}/publishing_succeeded.json`, { external })
+  }
+
+  async setPublishFailed(shopId: string, productId: string, reason: string): Promise<void> {
+    await this.client.post(`/shops/${shopId}/products/${productId}/publishing_failed.json`, { reason })
+  }
+
   async createOrder(shopId: string, payload: PrintifyCreateOrderPayload): Promise<PrintifyOrder> {
     const { data } = await this.client.post(`/shops/${shopId}/orders.json`, payload)
     return data
