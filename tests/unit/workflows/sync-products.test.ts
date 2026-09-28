@@ -105,19 +105,20 @@ describe("syncProductsWorkflow", () => {
     expect(listCallMatch![0]).toContain("shop_id")
   })
 
-  it("skips creating new Medusa products for unpublished printify_products", () => {
+  it("skips creating new Medusa products for effectively-unpublished printify_products", () => {
     // The "create new" branch (no medusaProductId) must early-return when
-    // is_published is false, so we never create Medusa products for drafts.
+    // effective visibility is draft (unpublished OR admin-hidden), so we
+    // never create Medusa products for drafts.
     // The "update existing" branch must still run so we can demote.
     const createBranchStart = source.indexOf("if (!medusaProductId)")
     expect(createBranchStart).toBeGreaterThan(-1)
     const createBranchSnippet = source.substring(createBranchStart, createBranchStart + 300)
-    expect(createBranchSnippet).toMatch(/if\s*\(\s*!pp\.is_published\s*\)/)
+    expect(createBranchSnippet).toMatch(/if\s*\(\s*computeEffectiveVisibility\(pp\)\s*===\s*"draft"\s*\)/)
   })
 
-  it("demotes existing Medusa products to draft when the printify_product is unpublished", () => {
-    // The update branch already computes targetStatus from pp.is_published —
-    // pin the logic so a future refactor doesn't drop it.
-    expect(source).toContain('pp.is_published ? "published" : "draft"')
+  it("demotes existing Medusa products using effective visibility (override-aware)", () => {
+    // The update branch computes targetStatus via computeEffectiveVisibility —
+    // pin the logic so a future refactor doesn't drop the override handling.
+    expect(source).toContain("const targetStatus = computeEffectiveVisibility(pp)")
   })
 })

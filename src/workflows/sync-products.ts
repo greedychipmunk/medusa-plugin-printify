@@ -8,6 +8,7 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import { createProductsWorkflow, updateProductsWorkflow } from "@medusajs/medusa/core-flows"
 import { IProductModuleService } from "@medusajs/types"
 import { PRINTIFY_MODULE } from "../modules/printify"
+import { computeEffectiveVisibility } from "./visibility"
 import PrintifyModuleService from "../modules/printify/service"
 import { PrintifyProduct, PrintifyVariant, PrintifyImage, PrintifyOption } from "../modules/printify/api-client"
 import { mapPrintifyOptions } from "./option-mapper"
@@ -75,6 +76,7 @@ const upsertProductsStep = createStep(
         print_areas: product.print_areas as unknown as Record<string, unknown>,
         printify_data: product as unknown as Record<string, unknown>,
         ...(shouldUpdateVisibility ? { is_published: printifyPublished } : {}),
+        is_locked: Boolean(product.is_locked),
       }
       if (existing.length > 0) {
         await service.updatePrintifyProducts({
@@ -297,9 +299,9 @@ const createMedusaProductsStep = createStep(
       }
 
       if (!medusaProductId) {
-        // Don't create a Medusa product for an unpublished Printify product.
+        // Don't create a Medusa product for an effectively-unpublished product.
         // It will be picked up on a later sync once it's published.
-        if (!pp.is_published) {
+        if (computeEffectiveVisibility(pp) === "draft") {
           continue
         }
         // Create a new Medusa product
@@ -340,7 +342,7 @@ const createMedusaProductsStep = createStep(
       } else {
         // Update existing linked Medusa product
         try {
-          const targetStatus = pp.is_published ? "published" : "draft"
+          const targetStatus = computeEffectiveVisibility(pp)
 
           // Build a map of existing Medusa variant IDs keyed by Printify variant ID
           // so updateProducts can match existing variants instead of trying to create duplicates
