@@ -2,6 +2,7 @@ import { Container, Heading, Button, Table, Badge, Input, Text, Switch } from "@
 import { ArrowLeft } from "@medusajs/icons"
 import { useState, useEffect } from "react"
 import { Link, useSearchParams } from "react-router-dom"
+import { computeEffectiveVisibility } from "../../../../workflows/visibility"
 
 type PrintifyImage = { src: string; position: string; is_default: boolean }
 type PrintifyProduct = {
@@ -9,7 +10,9 @@ type PrintifyProduct = {
   printify_id: string
   title: string
   is_published: boolean
-  printify_data?: { is_locked?: boolean; visible?: boolean } | null
+  is_locked?: boolean
+  visibility_override?: boolean | null
+  printify_data?: Record<string, unknown> | null
   variants: { id: number; title: string; cost: number }[]
   images: PrintifyImage[]
 }
@@ -18,6 +21,8 @@ const PrintifyProductsPage = () => {
   const [products, setProducts] = useState<PrintifyProduct[]>([])
   const [syncing, setSyncing] = useState(false)
   const [search, setSearch] = useState("")
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [visibilityError, setVisibilityError] = useState<string | null>(null)
   const [searchParams] = useSearchParams()
   const shopId = searchParams.get("shop_id")
   const shopName = searchParams.get("shop_name") ?? shopId ?? "All Shops"
@@ -43,11 +48,14 @@ const PrintifyProductsPage = () => {
     }
   }
 
+  const canShow = (product: PrintifyProduct) =>
+    computeEffectiveVisibility({ ...product, visibility_override: true }) === "published"
+
   const toggleVisibility = async (product: PrintifyProduct) => {
-    const newValue = !product.is_published
-    setProducts(prev =>
-      prev.map(p => p.id === product.id ? { ...p, is_published: newValue } : p)
-    )
+    const newValue = computeEffectiveVisibility(product) !== "published"
+    if (newValue && !canShow(product)) return
+    setTogglingId(product.id)
+    setVisibilityError(null)
     try {
       const res = await fetch(`/admin/printify/products/${product.id}`, {
         method: "PATCH",
@@ -55,11 +63,15 @@ const PrintifyProductsPage = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_published: newValue }),
       })
-      if (!res.ok) throw new Error("Request failed")
-    } catch {
-      setProducts(prev =>
-        prev.map(p => p.id === product.id ? { ...p, is_published: product.is_published } : p)
-      )
+      const json = await res.json()
+      if (json.product) {
+        setProducts(prev => prev.map(p => p.id === product.id ? json.product : p))
+      }
+      if (!res.ok) throw new Error(json.error ?? json.message ?? "Failed to update storefront visibility")
+    } catch (error) {
+      setVisibilityError(error instanceof Error ? error.message : "Failed to update storefront visibility")
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -74,11 +86,7 @@ const PrintifyProductsPage = () => {
     return img?.src ?? null
   }
 
-  // A locked product is mid-publish-handshake on Printify's side. For
-  // custom_integration shops it stays locked until this plugin acknowledges
-  // the publish — surface it so the stuck state is visible in Medusa admin.
-  const isPublishing = (product: PrintifyProduct) =>
-    product.printify_data?.is_locked === true && product.printify_data?.visible !== false
+  const isPublishing = (product: PrintifyProduct) => product.is_locked === true
 
   return (
     <Container className="p-8">
@@ -111,13 +119,15 @@ const PrintifyProductsPage = () => {
         className="mb-4 max-w-xs"
       />
 
+      {visibilityError && <Text role="alert" className="mb-4 text-ui-fg-error">{visibilityError}</Text>}
+
       <Table>
         <Table.Header>
           <Table.Row>
             <Table.HeaderCell className="w-12"></Table.HeaderCell>
             <Table.HeaderCell>Title</Table.HeaderCell>
             <Table.HeaderCell>Variants</Table.HeaderCell>
-            <Table.HeaderCell>Status</Table.HeaderCell>
+            <Table.HeaderCell>Printify Status</Table.HeaderCell>
             <Table.HeaderCell>Visible on Store</Table.HeaderCell>
           </Table.Row>
         </Table.Header>
@@ -150,18 +160,23 @@ const PrintifyProductsPage = () => {
               <Table.Cell>
                 <Link to={`/printify/products/${product.id}`} className="block no-underline">
                   <Badge
-                    color={isPublishing(product) ? "orange" : product.is_published ? "green" : "grey"}
+                    color={isPublishing(product) ? "orange" : canShow(product) ? "green" : "grey"}
                     size="2xsmall"
                   >
-                    {isPublishing(product) ? "Publishing" : product.is_published ? "Published" : "Draft"}
+                    {isPublishing(product) ? "Publishing" : canShow(product) ? "Published" : "Draft"}
                   </Badge>
                 </Link>
               </Table.Cell>
               <Table.Cell onClick={e => e.stopPropagation()}>
                 <Switch
-                  checked={product.is_published}
+                  checked={computeEffectiveVisibility(product) === "published"}
                   onCheckedChange={() => toggleVisibility(product)}
+                  disabled={togglingId !== null || !canShow(product)}
+                  aria-label={`Storefront visibility for ${product.title}`}
                 />
+                {!canShow(product) && (
+                  <Text size="small" className="text-ui-fg-muted">Publish in Printify first</Text>
+                )}
               </Table.Cell>
             </Table.Row>
           ))}

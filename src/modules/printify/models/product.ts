@@ -9,16 +9,17 @@ const PrintifyProduct = model.define("printify_product", {
   variants: model.json(),
   images: model.json(),
   print_areas: model.json(),
+  // Confirmed upstream publication, not the default-true `visible` flag.
+  // Requires visible, unlocked, and a successful external publication record.
   is_published: model.boolean().default(false),
-  // Printify lock state. Informational: for custom_integration shops a
-  // product stays locked until this plugin completes the publish handshake,
-  // so locked+visible is still treated as published (see workflows/visibility.ts).
-  // Persisted so lock state is queryable without parsing printify_data.
+  // Authoritative upstream publishing state. Locked products remain private
+  // until the publish handshake completes and an unlocked state is confirmed.
   is_locked: model.boolean().default(false),
   // Three-state intent:
-  //   null  = follow Printify's is_locked flag (default, set on sync)
-  //   true  = admin force-published (sync will not overwrite is_published)
-  //   false = admin force-hidden    (sync will not overwrite is_published)
+  //   null  = follow confirmed Printify publication (default)
+  //   true  = allow visibility only after confirmed Printify publication
+  //   false = additionally hide the product, even if Printify publishes it
+  // Upstream is_published/is_locked facts are refreshed regardless of intent.
   visibility_override: model.boolean().nullable(),
   printify_data: model.json().nullable(),
 })

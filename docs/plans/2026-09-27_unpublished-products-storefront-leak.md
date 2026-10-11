@@ -1,5 +1,10 @@
 # Bug fix plan: unpublished Printify products must not show in the storefront
 
+> Historical plan, superseded by [the 2026-10-10 publication gate](../2026-10-10_printify-publication-gate.md).
+> In particular, force-show overrides and default-true `visible` are NOT proof of
+> publication. Prepare pending publications privately and require successful
+> external publication evidence before public display.
+
 **Date:** 2026-09-27
 **Repo:** medusa-plugin-printify
 **Symptom (reported):** Products that are not published in Printify are appearing on the TrendTri storefront.
