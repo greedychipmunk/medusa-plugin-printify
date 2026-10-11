@@ -46,6 +46,7 @@ export type PrintifyProduct = {
   print_areas: Record<string, unknown>[]
   is_locked: boolean
   visible: boolean
+  external?: { id?: string | null; handle?: string | null } | null
 }
 
 export type PrintifyAddress = {

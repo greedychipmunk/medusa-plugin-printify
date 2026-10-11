@@ -329,15 +329,36 @@ All admin routes require authentication. Storefront routes are public.
 For shops connected via a **custom integration** sales channel, Printify locks a product when a publish is initiated and waits for the integration to mirror the product and acknowledge the publish. This plugin completes that handshake automatically:
 
 1. Printify emits `product:publish:started` and locks the product.
-2. The plugin syncs the product into Medusa (published, on the storefront).
-3. The plugin calls Printify's `publishing_succeeded` with the Medusa product id and storefront URL — which unlocks the product.
+2. The plugin prepares a **private Medusa draft**, obtaining its ID and handle without exposing a product still publishing.
+3. The plugin calls Printify's `publishing_succeeded` with that ID and storefront URL, which unlocks the product.
+4. The plugin re-fetches confirmed upstream state and makes the product public only when `visible === true`, `is_locked === false`, Printify supplies its successful `external` publication record, and the merchant has not hidden it.
 
-If the sync fails, the plugin reports `publishing_failed` with the reason so the product unlocks and the error is visible in Printify.
+If preparation or acknowledgment fails for a verified pending publication, the plugin reports `publishing_failed` with the reason so the product unlocks and the error is visible in Printify.
+
+If the acknowledgment succeeds but the confirmation sync fails, the product remains
+private until a successful refresh; the completed publication is not falsely
+reported as failed. Missing/malformed publication data fails closed.
+
+### Storefront visibility
+
+Publishing must happen in Printify first. The admin storefront switch expresses
+local visibility intent, not upstream publication: it can hide a published product
+or show a **confirmed published, unlocked** product, but it cannot force-show a
+Printify draft or publishing product. `visibility_override = null` follows Printify,
+`false` additionally hides, and `true` allows display only after upstream confirmation.
+Every sync refreshes upstream publication/lock facts regardless of this preference.
+Printify documents `visible` as defaulting to true, including unpublished drafts.
+`is_published` therefore means **confirmed publication**, derived from visible,
+unlocked state and a nonempty `external.id`/`external.handle` established by
+successful publication, not merely the raw visibility preference. A failed
+publication that unlocks without an external record remains private.
+The legacy PATCH body `{ "is_published": boolean }` is retained for compatibility
+but updates local intent only; showing verifies fresh Printify state.
 
 If products were created before this handshake existed, they may be stuck in "Publishing" (locked). To reconcile them:
 
 ```bash
-pnpm medusa exec ./node_modules/medusa-plugin-printify/dist/scripts/reconcile-publishing.js
+pnpm medusa exec ./node_modules/medusa-plugin-printify/.medusa/server/src/scripts/reconcile-publishing.js
 ```
 
 ---

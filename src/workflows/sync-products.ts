@@ -8,7 +8,7 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import { createProductsWorkflow, updateProductsWorkflow } from "@medusajs/medusa/core-flows"
 import { IProductModuleService } from "@medusajs/types"
 import { PRINTIFY_MODULE } from "../modules/printify"
-import { computeEffectiveVisibility } from "./visibility"
+import { computeEffectiveVisibility, isPrintifyPublished, isPrintifyPublishing } from "./visibility"
 import PrintifyModuleService from "../modules/printify/service"
 import { PrintifyProduct, PrintifyVariant, PrintifyImage, PrintifyOption } from "../modules/printify/api-client"
 import { mapPrintifyOptions } from "./option-mapper"
@@ -31,7 +31,28 @@ const fetchAllProductsStep = createStep(
 
     do {
       const response = await client.getProducts(shopId, page, 50)
-      products.push(...response.data)
+      if (!Array.isArray(response.data) || !Number.isInteger(response.last_page) || response.last_page < page) {
+        throw new Error(`[printify] Invalid catalog pagination for shop ${shopId}, page ${page}; refusing a partial sync`)
+      }
+      for (const product of response.data) {
+        // List projections may omit publication evidence. Verify a potentially
+        // public product with the full resource rather than infer from visible.
+        if (product.visible === true && product.is_locked === false && !isPrintifyPublished(product)) {
+          try {
+            const detail = await client.getProduct(shopId, String(product.id))
+            if (String(detail?.id) !== String(product.id)) throw new Error("Product verification returned a different resource")
+            products.push(detail)
+          } catch (err) {
+            container.resolve(ContainerRegistrationKeys.LOGGER).error(JSON.stringify({
+              event: "printify.publication_verification_failed", shop_id: shopId,
+              printify_id: product.id, error: err instanceof Error ? err.message : String(err),
+            }))
+            // No verified publication evidence: preserve the list snapshot,
+            // which the shared policy safely treats as private.
+            products.push(product)
+          }
+        } else products.push(product)
+      }
       lastPage = response.last_page
       page++
     } while (page <= lastPage)
@@ -53,18 +74,9 @@ const upsertProductsStep = createStep(
 
     for (const product of products) {
       const existing = await service.listPrintifyProducts({ printify_id: String(product.id) })
-      // NOTE: is_locked means a publish handshake is in progress on Printify's
-      // side. For custom_integration shops the product stays locked until this
-      // plugin acknowledges via publishing_succeeded/publishing_failed — so a
-      // locked+visible product must be treated as published. Otherwise the
-      // Medusa product is never created and the handshake can never complete
-      // (products stuck in "Publishing" forever).
-      const printifyPublished = product.visible
-      // visibility_override is null until an admin manually sets it;
-      // MikroORM returns null (never undefined) for nullable boolean columns
-      const shouldUpdateVisibility =
-        existing.length === 0 ||
-        existing[0].visibility_override === null
+      // Upstream facts must never be frozen or rewritten by local intent.
+      // A private Medusa draft can be prepared while publishing is pending.
+      const printifyPublished = isPrintifyPublished(product)
 
       const data = {
         printify_id: String(product.id),
@@ -75,8 +87,8 @@ const upsertProductsStep = createStep(
         images: product.images as unknown as Record<string, unknown>,
         print_areas: product.print_areas as unknown as Record<string, unknown>,
         printify_data: product as unknown as Record<string, unknown>,
-        ...(shouldUpdateVisibility ? { is_published: printifyPublished } : {}),
-        is_locked: Boolean(product.is_locked),
+        is_published: printifyPublished,
+        is_locked: product.is_locked !== false,
       }
       if (existing.length > 0) {
         await service.updatePrintifyProducts({
@@ -85,6 +97,18 @@ const upsertProductsStep = createStep(
         })
       } else {
         await service.createPrintifyProducts([data])
+      }
+    }
+
+    // A successfully fetched complete catalog is authoritative for absence as
+    // well. Missed deletion webhooks must not leave old published rows public.
+    const seen = new Set(products.map(product => String(product.id)))
+    const staged = await service.listPrintifyProducts({ shop_id: shopId })
+    for (const pp of staged) {
+      if (!seen.has(pp.printify_id)) {
+        await service.updatePrintifyProducts({
+          selector: { id: pp.id }, data: { is_published: false, is_locked: false },
+        })
       }
     }
 
@@ -197,12 +221,38 @@ const createMedusaProductsStep = createStep(
       return new StepResponse({ created: 0, updated: 0 })
     }
 
+    // Withdraw public eligibility before shipping/channel/pricing prerequisites
+    // or invalid variants can skip a product. Preserve commerce IDs/history.
+    let updated = 0
+    const linkedProducts = new Map<string, string>()
+    const productsToMirror: typeof printifyProducts = []
+    for (const pp of printifyProducts) {
+      const { data } = await query.graph({
+        entity: "printify_product", fields: ["product.id"], filters: { id: pp.id },
+      })
+      const linkedId = data[0]?.product?.id as string | undefined
+      if (linkedId) linkedProducts.set(pp.id, linkedId)
+      if (linkedId && computeEffectiveVisibility(pp) === "draft") {
+        try {
+          await productModuleService.updateProducts(linkedId, { status: "draft" })
+        } catch (err) {
+          logger.error(`[printify] Failed to withdraw public product ${linkedId}: ${err instanceof Error ? err.message : String(err)}`)
+          throw err
+        }
+        updated++
+        logger.info(`[printify] Drafted Medusa product ${linkedId}: upstream publication not eligible or merchant-hidden`)
+      } else if (pp.is_published === true || isPrintifyPublishing(pp.printify_data)) {
+        productsToMirror.push(pp)
+      }
+    }
+    if (productsToMirror.length === 0) return new StepResponse({ created: 0, updated })
+
     // Resolve shipping profile (first available)
     const fulfillmentService = container.resolve(Modules.FULFILLMENT)
     const shippingProfiles = await fulfillmentService.listShippingProfiles({})
     if (shippingProfiles.length === 0) {
       logger.warn("[printify] No shipping profiles found — skipping Medusa product creation")
-      return new StepResponse({ created: 0, updated: 0 })
+      return new StepResponse({ created: 0, updated })
     }
     const shippingProfileId = shippingProfiles[0].id
 
@@ -225,9 +275,9 @@ const createMedusaProductsStep = createStep(
         `[printify] PRODUCTS WILL NOT APPEAR ON STOREFRONT — no sales channel configured. ` +
         `Set printify_shop.sales_channel_id via PATCH /admin/printify/shops/${shopId}, ` +
         `or set a default_sales_channel_id on the store. ` +
-        `(${printifyProducts.length} published products waiting to sync)`
+        `(${productsToMirror.length} products waiting to mirror)`
       )
-      return new StepResponse({ created: 0, updated: 0 })
+      return new StepResponse({ created: 0, updated })
     }
 
     // Fetch all unique currencies from active regions
@@ -268,24 +318,12 @@ const createMedusaProductsStep = createStep(
     const hasCompletePricing = ratesFetched || currencies.length <= 1
 
     let created = 0
-    let updated = 0
 
-    for (const pp of printifyProducts) {
+    for (const pp of productsToMirror) {
       // Check if a linked Medusa product already exists
-      let medusaProductId: string | null = null
-      try {
-        const { data } = await query.graph({
-          entity: "printify_product",
-          fields: ["product.id"],
-          filters: { id: pp.id },
-        })
-        if (data.length > 0 && data[0].product?.id) {
-          medusaProductId = data[0].product.id
-        }
-      } catch {
-        // Link query failed — treat as no link
-      }
+      const medusaProductId = linkedProducts.get(pp.id) ?? null
 
+      const targetStatus = computeEffectiveVisibility(pp)
       const { enabledVariants, printifyImages, mapped } = extractPrintifyMappings(pp)
 
       if (enabledVariants.length === 0) {
@@ -299,9 +337,10 @@ const createMedusaProductsStep = createStep(
       }
 
       if (!medusaProductId) {
-        // Don't create a Medusa product for an effectively-unpublished product.
-        // It will be picked up on a later sync once it's published.
-        if (computeEffectiveVisibility(pp) === "draft") {
+        // Never mirror a never-published upstream draft into a public product.
+        // Visible products still publishing (or merchant-hidden) are prepared
+        // as PRIVATE drafts, allowing the custom-integration handshake to finish.
+        if (pp.is_published !== true && !isPrintifyPublishing(pp.printify_data)) {
           continue
         }
         // Create a new Medusa product
@@ -313,7 +352,7 @@ const createMedusaProductsStep = createStep(
                   title: pp.title,
                   description: pp.description || undefined,
                   handle: slugify(pp.title),
-                  status: "published" as const,
+                  status: targetStatus,
                   images: printifyImages.map((img) => ({ url: img.src })),
                   options: mapped.medusaOptions,
                   variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id, activeCurrencies, rates),
@@ -342,8 +381,6 @@ const createMedusaProductsStep = createStep(
       } else {
         // Update existing linked Medusa product
         try {
-          const targetStatus = computeEffectiveVisibility(pp)
-
           // Build a map of existing Medusa variant IDs keyed by Printify variant ID
           // so updateProducts can match existing variants instead of trying to create duplicates
           const existingProduct = await productModuleService.retrieveProduct(medusaProductId, {

@@ -2,6 +2,7 @@ import { Container, Heading, Text, Badge, Table, Switch, Label } from "@medusajs
 import { ArrowLeft, ArrowUpRightOnBox } from "@medusajs/icons"
 import { useState, useEffect } from "react"
 import { useParams, Link } from "react-router-dom"
+import { computeEffectiveVisibility } from "../../../../../workflows/visibility"
 
 type PrintifyVariant = {
   id: number
@@ -28,6 +29,8 @@ type PrintifyProductDetail = {
   variants: PrintifyVariant[]
   images: PrintifyImage[]
   is_published: boolean
+  is_locked?: boolean
+  visibility_override?: boolean | null
   printify_data: Record<string, unknown> | null
 }
 
@@ -39,7 +42,10 @@ const PrintifyProductDetailPage = () => {
   const [medusaProductId, setMedusaProductId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [rawOpen, setRawOpen] = useState(false)
-  const [isPublished, setIsPublished] = useState(false)
+  const [visibilityError, setVisibilityError] = useState<string | null>(null)
+  const isVisible = product !== null && computeEffectiveVisibility(product) === "published"
+  const canShow = product !== null &&
+    computeEffectiveVisibility({ ...product, visibility_override: true }) === "published"
   const [toggling, setToggling] = useState(false)
 
   useEffect(() => {
@@ -48,7 +54,6 @@ const PrintifyProductDetailPage = () => {
         const res = await fetch(`/admin/printify/products/${id}`, { credentials: "include" })
         const json = await res.json()
         setProduct(json.product)
-        setIsPublished(json.product.is_published)
         setMedusaProductId(json.medusa_product_id ?? null)
       } finally {
         setLoading(false)
@@ -58,8 +63,10 @@ const PrintifyProductDetailPage = () => {
   }, [id])
 
   const toggleVisibility = async () => {
+    const newValue = !isVisible
+    if (newValue && !canShow) return
     setToggling(true)
-    const newValue = !isPublished
+    setVisibilityError(null)
     try {
       const res = await fetch(`/admin/printify/products/${id}`, {
         method: "PATCH",
@@ -67,9 +74,11 @@ const PrintifyProductDetailPage = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_published: newValue }),
       })
-      if (res.ok) {
-        setIsPublished(newValue)
-      }
+      const json = await res.json()
+      if (json.product) setProduct(json.product)
+      if (!res.ok) throw new Error(json.error ?? json.message ?? "Failed to update storefront visibility")
+    } catch (error) {
+      setVisibilityError(error instanceof Error ? error.message : "Failed to update storefront visibility")
     } finally {
       setToggling(false)
     }
@@ -112,20 +121,25 @@ const PrintifyProductDetailPage = () => {
             </Text>
           </div>
           <div className="flex items-center gap-3">
-            <Badge color={isPublished ? "green" : "grey"} size="small">
-              {isPublished ? "Published" : "Draft"}
+            <Text size="small" className="text-ui-fg-muted">Printify Status</Text>
+            <Badge color={product.is_locked === true ? "orange" : canShow ? "green" : "grey"} size="small">
+              {product.is_locked === true ? "Publishing" : canShow ? "Published" : "Draft"}
             </Badge>
             <Switch
               id="visibility-toggle"
-              checked={isPublished}
+              checked={isVisible}
               onCheckedChange={toggleVisibility}
-              disabled={toggling}
+              disabled={toggling || !canShow}
             />
             <Label htmlFor="visibility-toggle" className="text-ui-fg-muted text-sm cursor-pointer">
-              {isPublished ? "Visible on storefront" : "Hidden from storefront"}
+              {isVisible ? "Visible on storefront" : "Hidden from storefront"}
             </Label>
           </div>
         </div>
+        {!canShow && (
+          <Text size="small" className="mt-3 text-ui-fg-muted">Publish in Printify first and wait for publishing to finish.</Text>
+        )}
+        {visibilityError && <Text role="alert" className="mt-3 text-ui-fg-error">{visibilityError}</Text>}
         {product.description && (
           <Text className="mt-3">{product.description}</Text>
         )}

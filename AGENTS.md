@@ -152,6 +152,20 @@ export default PrintifyWidget
 
 Admin UI components should use `@medusajs/ui` and `@medusajs/icons` for visual consistency.
 
+### Printify publication invariant
+
+Never force-show an upstream draft. Printify's `visible` defaults to true and is
+NOT publication status. Derive `is_published` using `isPrintifyPublished(raw)`:
+visible true, `is_locked` false, valid successful external id/handle. Refresh the
+full upstream snapshot on every sync and verify raw evidence as well as flags.
+It is not admin intent. Public status requires
+`is_published === true`, `is_locked === false`, and no explicit local hide.
+Use `computeEffectiveVisibility` in every status writer. Withdraw eligibility
+before variant/options/shipping/pricing checks can skip a product. Pending custom
+integration publications may be prepared as private Medusa drafts, then acknowledged
+and re-fetched; only confirmed completion permits public display. Do not reinstate
+the old locked-product deadlock by refusing to prepare private draft records.
+
 ### Module Links (`src/links/`)
 
 Links connect Printify module data to core Medusa entities without coupling the modules together. For example, linking a `PrintifyProduct` to a Medusa `Product`.

@@ -105,15 +105,14 @@ describe("syncProductsWorkflow", () => {
     expect(listCallMatch![0]).toContain("shop_id")
   })
 
-  it("skips creating new Medusa products for effectively-unpublished printify_products", () => {
-    // The "create new" branch (no medusaProductId) must early-return when
-    // effective visibility is draft (unpublished OR admin-hidden), so we
-    // never create Medusa products for drafts.
-    // The "update existing" branch must still run so we can demote.
+  it("never creates upstream drafts publicly; prepares pending publications with effective private status", () => {
+    // Pending/merchant-hidden upstream-visible products may need private
+    // records for the handshake. Their public status is still gated.
     const createBranchStart = source.indexOf("if (!medusaProductId)")
     expect(createBranchStart).toBeGreaterThan(-1)
-    const createBranchSnippet = source.substring(createBranchStart, createBranchStart + 300)
-    expect(createBranchSnippet).toMatch(/if\s*\(\s*computeEffectiveVisibility\(pp\)\s*===\s*"draft"\s*\)/)
+    const createBranchSnippet = source.substring(createBranchStart, createBranchStart + 700)
+    expect(createBranchSnippet).toContain("pp.is_published !== true && !isPrintifyPublishing(pp.printify_data)")
+    expect(source).toContain("status: targetStatus")
   })
 
   it("demotes existing Medusa products using effective visibility (override-aware)", () => {
