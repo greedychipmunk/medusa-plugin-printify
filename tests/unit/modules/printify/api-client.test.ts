@@ -178,6 +178,27 @@ describe("PrintifyApiClient", () => {
     expect(result.topic).toBe("order:shipped")
   })
 
+  it("createWebhook includes the secret when provided", async () => {
+    const client = new PrintifyApiClient("key")
+    mockPost.mockResolvedValue({ data: {} })
+    await client.createWebhook("shop1", "order:shipped", "https://store.com/webhooks/printify", "sekrit")
+    expect(mockPost).toHaveBeenCalledWith("/shops/shop1/webhooks.json", {
+      topic: "order:shipped",
+      url: "https://store.com/webhooks/printify",
+      secret: "sekrit",
+    })
+  })
+
+  it("createWebhook omits the secret when not provided", async () => {
+    const client = new PrintifyApiClient("key")
+    mockPost.mockResolvedValue({ data: {} })
+    await client.createWebhook("shop1", "order:shipped", "https://store.com/webhooks/printify")
+    expect(mockPost).toHaveBeenCalledWith("/shops/shop1/webhooks.json", {
+      topic: "order:shipped",
+      url: "https://store.com/webhooks/printify",
+    })
+  })
+
   it("deleteWebhook calls delete endpoint", async () => {
     const client = new PrintifyApiClient("key")
     mockDelete.mockResolvedValue({ data: {} })
