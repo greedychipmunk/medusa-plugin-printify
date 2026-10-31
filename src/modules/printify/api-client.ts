@@ -181,8 +181,17 @@ export class PrintifyApiClient {
     return data
   }
 
-  async createWebhook(shopId: string, topic: string, url: string): Promise<PrintifyWebhook> {
-    const { data } = await this.client.post(`/shops/${shopId}/webhooks.json`, { topic, url })
+  async createWebhook(
+    shopId: string,
+    topic: string,
+    url: string,
+    secret?: string
+  ): Promise<PrintifyWebhook> {
+    const body: { topic: string; url: string; secret?: string } = { topic, url }
+    if (secret) {
+      body.secret = secret
+    }
+    const { data } = await this.client.post(`/shops/${shopId}/webhooks.json`, body)
     return data
   }
 

@@ -2,6 +2,7 @@ import registerWebhooksHandler from "../../../src/subscribers/plugin-registered"
 
 const mockGetWebhooks = jest.fn()
 const mockCreateWebhook = jest.fn()
+const mockDeleteWebhook = jest.fn()
 const mockGetOptions = jest.fn()
 const mockGetApiClient = jest.fn()
 
@@ -19,6 +20,7 @@ beforeEach(() => {
   mockGetApiClient.mockReturnValue({
     getWebhooks: mockGetWebhooks,
     createWebhook: mockCreateWebhook,
+    deleteWebhook: mockDeleteWebhook,
   })
 })
 
@@ -53,7 +55,71 @@ describe("registerWebhooksHandler", () => {
     expect(mockCreateWebhook).toHaveBeenCalledWith(
       "shop1",
       "order:status-changed",
-      "https://example.com/webhooks/printify"
+      "https://example.com/webhooks/printify",
+      undefined
+    )
+  })
+
+  it("passes the webhook secret when creating webhooks", async () => {
+    mockGetOptions.mockReturnValue({
+      shopId: "shop1",
+      webhookBaseUrl: "https://example.com",
+      webhookSecret: "sekrit",
+    })
+    mockGetWebhooks.mockResolvedValue([])
+    mockCreateWebhook.mockResolvedValue({})
+
+    await registerWebhooksHandler({ container: mockContainer } as any)
+
+    expect(mockCreateWebhook).toHaveBeenCalledWith(
+      "shop1",
+      "order:status-changed",
+      "https://example.com/webhooks/printify",
+      "sekrit"
+    )
+  })
+
+  it("replaces existing unsigned webhooks when a secret is configured", async () => {
+    mockGetOptions.mockReturnValue({
+      shopId: "shop1",
+      webhookBaseUrl: "https://example.com",
+      webhookSecret: "sekrit",
+    })
+    mockGetWebhooks.mockResolvedValue([
+      { id: "wh1", topic: "order:shipped", secret: "" },
+    ])
+    mockCreateWebhook.mockResolvedValue({})
+    mockDeleteWebhook.mockResolvedValue(undefined)
+
+    await registerWebhooksHandler({ container: mockContainer } as any)
+
+    expect(mockDeleteWebhook).toHaveBeenCalledWith("shop1", "wh1")
+    expect(mockCreateWebhook).toHaveBeenCalledWith(
+      "shop1",
+      "order:shipped",
+      "https://example.com/webhooks/printify",
+      "sekrit"
+    )
+  })
+
+  it("leaves existing signed webhooks untouched", async () => {
+    mockGetOptions.mockReturnValue({
+      shopId: "shop1",
+      webhookBaseUrl: "https://example.com",
+      webhookSecret: "sekrit",
+    })
+    mockGetWebhooks.mockResolvedValue([
+      { id: "wh1", topic: "order:shipped", secret: "existing" },
+    ])
+
+    await registerWebhooksHandler({ container: mockContainer } as any)
+
+    expect(mockDeleteWebhook).not.toHaveBeenCalledWith("shop1", "wh1")
+    expect(mockCreateWebhook).not.toHaveBeenCalledWith(
+      "shop1",
+      "order:shipped",
+      expect.any(String),
+      expect.any(String)
     )
   })
 

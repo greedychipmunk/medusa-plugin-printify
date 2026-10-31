@@ -13,6 +13,12 @@ describe("verifyPrintifySignature", () => {
     expect(verifyPrintifySignature(body, sig, secret)).toBe(true)
   })
 
+  it("returns true for a valid signature with a sha256= prefix", () => {
+    const body = JSON.stringify({ topic: "order:shipped" })
+    const sig = `sha256=${makeSignature(body)}`
+    expect(verifyPrintifySignature(body, sig, secret)).toBe(true)
+  })
+
   it("returns false for a tampered signature", () => {
     const body = JSON.stringify({ topic: "order:shipped" })
     const sig = makeSignature(body)
