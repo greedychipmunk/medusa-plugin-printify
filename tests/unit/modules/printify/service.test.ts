@@ -85,4 +85,64 @@ describe("PrintifyModuleService", () => {
     const service = new PrintifyModuleService({}, { options: opts })
     expect(service.getOptions()).toEqual(opts)
   })
+
+  describe("onApplicationStart hook (webhook registration trigger)", () => {
+    // These tests prove the trigger is wired, not just that the registration
+    // logic works: Medusa invokes `instance.__hooks.onApplicationStart` at boot.
+    it("exposes an onApplicationStart hook", () => {
+      const service = new PrintifyModuleService({}, { options: { apiKey: "k", webhookSecret: "s" } })
+      expect(typeof service.__hooks?.onApplicationStart).toBe("function")
+    })
+
+    it("registers signed webhooks when the hook runs", async () => {
+      jest.spyOn(console, "log").mockImplementation(() => {})
+      const get = jest.fn().mockResolvedValue({ data: [{ id: "old", topic: "order:shipped", secret: "" }] })
+      const post = jest.fn().mockResolvedValue({ data: {} })
+      const del = jest.fn().mockResolvedValue({ data: {} })
+      ;(axios.create as jest.Mock).mockReturnValue({
+        get,
+        post,
+        delete: del,
+        interceptors: { response: { use: jest.fn() } },
+      })
+      const service = new PrintifyModuleService({}, {
+        options: {
+          apiKey: "k",
+          webhookSecret: "sekrit",
+          shopId: "shop1",
+          webhookBaseUrl: "https://example.com",
+        },
+      })
+
+      await service.__hooks!.onApplicationStart!()
+
+      expect(get).toHaveBeenCalledWith("/shops/shop1/webhooks.json")
+      expect(del).toHaveBeenCalledWith("/shops/shop1/webhooks/old.json")
+      expect(post).toHaveBeenCalledWith(
+        "/shops/shop1/webhooks.json",
+        expect.objectContaining({
+          topic: "order:shipped",
+          url: "https://example.com/webhooks/printify",
+          secret: "sekrit",
+        })
+      )
+      jest.restoreAllMocks()
+    })
+
+    it("resolves without registering when webhook config is absent", async () => {
+      jest.spyOn(console, "warn").mockImplementation(() => {})
+      const get = jest.fn()
+      ;(axios.create as jest.Mock).mockReturnValue({
+        get,
+        post: jest.fn(),
+        delete: jest.fn(),
+        interceptors: { response: { use: jest.fn() } },
+      })
+      const service = new PrintifyModuleService({}, { options: { apiKey: "k", webhookSecret: "s" } })
+
+      await expect(service.__hooks!.onApplicationStart!()).resolves.toBeUndefined()
+      expect(get).not.toHaveBeenCalled()
+      jest.restoreAllMocks()
+    })
+  })
 })
