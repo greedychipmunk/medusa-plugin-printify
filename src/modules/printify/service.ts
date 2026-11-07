@@ -1,6 +1,8 @@
 import { MedusaService } from "@medusajs/framework/utils"
+import type { IModuleService } from "@medusajs/framework/types"
 import { PrintifyApiClient } from "./api-client"
 import { PrintifyModuleOptions } from "./types"
+import { registerWebhooksWithTimeout } from "./register-webhooks"
 import PrintifyShop from "./models/shop"
 import PrintifyProduct from "./models/product"
 import PrintifyOrder from "./models/order"
@@ -14,6 +16,7 @@ class PrintifyModuleService extends MedusaService({
 }) {
   private apiClient: PrintifyApiClient
   private options: PrintifyModuleOptions
+  __hooks: IModuleService["__hooks"]
 
   constructor(
     container: InjectedDependencies,
@@ -32,6 +35,16 @@ class PrintifyModuleService extends MedusaService({
     }
     this.options = options
     this.apiClient = new PrintifyApiClient(options.apiKey)
+
+    // Medusa calls module `__hooks.onApplicationStart` during `medusa start`
+    // (and during `medusa db:migrate` scripts). This is the startup trigger
+    // for webhook registration — Medusa v2 never emits an `app.started` event,
+    // so the former subscriber on that event never ran.
+    this.__hooks = {
+      onApplicationStart: async () => {
+        await registerWebhooksWithTimeout(this.apiClient, this.options)
+      },
+    }
   }
 
   getApiClient(): PrintifyApiClient {
