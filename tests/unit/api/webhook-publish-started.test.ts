@@ -1,5 +1,6 @@
 import { createHmac } from "crypto"
 import { POST } from "../../../src/api/webhooks/printify/route"
+import { WEBHOOK_TOPICS } from "../../../src/modules/printify/register-webhooks"
 import { syncProductsWorkflow } from "../../../src/workflows/sync-products"
 import { computeEffectiveVisibility, isPrintifyPublished } from "../../../src/workflows/visibility"
 
@@ -234,9 +235,36 @@ describe("product publication webhook behavior", () => {
     expect(products.updateProducts).not.toHaveBeenCalled()
   })
 
-  it("preserves order status handling", async () => {
-    await deliver("order:status-changed", { status: "fulfilled" })
-    expect(service.updatePrintifyOrders).toHaveBeenCalledWith({ selector: { printify_id: "printify" }, data: { status: "fulfilled" } })
+  // Payload shapes from developers.printify.com "Events".
+  it.each([
+    ["order:updated", { shop_id: 1, status: "in-production" }, "in-production"],
+    ["order:sent-to-production", { shop_id: 1 }, "sent-to-production"],
+    ["order:shipment:created", { shop_id: 1, shipped_at: "2022-05-17 15:00:00+00:00", carrier: { code: "USPS" } }, "shipped"],
+    ["order:shipment:delivered", { shop_id: 1, delivered_at: "2022-05-17 15:00:00+00:00", carrier: { code: "USPS" } }, "delivered"],
+  ])("maps %s to local order status %s", async (type, data, expected) => {
+    const res = await deliver(type, data)
+    expect(service.updatePrintifyOrders).toHaveBeenCalledWith({ selector: { printify_id: "printify" }, data: { status: expected } })
+    expect(res.sendStatus).toHaveBeenCalledWith(200)
     expect(run).not.toHaveBeenCalled()
+  })
+
+  it("ignores order:updated without a status instead of writing a bogus one", async () => {
+    const res = await deliver("order:updated", { shop_id: 1 })
+    expect(service.updatePrintifyOrders).not.toHaveBeenCalled()
+    expect(res.sendStatus).toHaveBeenCalledWith(200)
+  })
+
+  it("does not treat the non-Printify names order:status-changed / order:shipped as order events", async () => {
+    await deliver("order:status-changed", { status: "fulfilled" })
+    await deliver("order:shipped", {})
+    expect(service.updatePrintifyOrders).not.toHaveBeenCalled()
+  })
+
+  it("every registered topic has a handler branch", async () => {
+    for (const topic of WEBHOOK_TOPICS) {
+      ;(console.warn as jest.Mock).mockClear()
+      await deliver(topic, { shop_id: 1, status: "in-production", action: "create" })
+      expect(console.warn).not.toHaveBeenCalledWith(expect.stringContaining("unhandled event type"))
+    }
   })
 })
