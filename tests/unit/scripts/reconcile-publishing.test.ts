@@ -143,12 +143,23 @@ describe("explicit publishing reconciliation", () => {
     expect(client.setPublishSucceeded).toHaveBeenCalledTimes(1)
     expect(client.setPublishFailed).not.toHaveBeenCalled()
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('"stage":"confirmed_refresh"'))
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining("succeeded=1 failed=0 refresh_failed=1"))
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining("succeeded=0 failed=0 refresh_failed=1"))
+  })
+
+  // Regression 2026-11-08: a product hidden in Printify is still a pending
+  // publish request while locked; completing it keeps it off the storefront.
+  it.each([false, "true"])("completes a locked request when visible is %p, keeping it draft", async visible => {
+    state = { visible: visible as boolean, is_locked: true, external: null }
+    await execute()
+    expect(client.setPublishSucceeded).toHaveBeenCalledTimes(1)
+    expect(client.setPublishFailed).not.toHaveBeenCalled()
+    expect(status).toBe("draft")
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining("succeeded=1 failed=0 refresh_failed=0"))
   })
 
   it.each([
-    { visible: false, is_locked: true }, { visible: true, is_locked: false },
-    { visible: true }, { visible: "true", is_locked: true }, { visible: true, is_locked: "true" }, {},
+    { visible: false, is_locked: false }, { visible: true, is_locked: false },
+    { visible: true }, { visible: true, is_locked: "true" }, {},
   ])("never completes unrelated or malformed publication requests %p", async flags => {
     client.getProducts.mockResolvedValue({ data: [{ id: "upstream", ...flags }], last_page: 1 })
     await execute()

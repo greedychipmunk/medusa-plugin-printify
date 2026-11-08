@@ -1,4 +1,4 @@
-import { computeEffectiveVisibility, isPrintifyPublished } from "../../../src/workflows/visibility"
+import { computeEffectiveVisibility, isPrintifyPublished, isPrintifyPublishing, isPublicationComplete } from "../../../src/workflows/visibility"
 
 const publication = { visible: true, is_locked: false, external: { id: "external_1", handle: "https://example.test/products/tee" } }
 
@@ -41,5 +41,35 @@ describe("computeEffectiveVisibility", () => {
     expect(isPrintifyPublished(publication)).toBe(true)
     expect(isPrintifyPublished({ ...publication, is_locked: true })).toBe(false)
     expect(isPrintifyPublished({ ...publication, visible: false })).toBe(false)
+  })
+})
+
+describe("publish request state vs storefront eligibility", () => {
+  it.each([
+    [{ visible: false, is_locked: true }, true],
+    [{ visible: true, is_locked: true }, true],
+    [{ is_locked: true }, true],
+    [{ visible: true, is_locked: false }, false],
+    [{ visible: false, is_locked: false, external: publication.external }, false],
+    [{ is_locked: "true" }, false],
+    [null, false],
+  ])("isPrintifyPublishing(%p) is %p: only the lock means Printify is waiting", (product, expected) => {
+    expect(isPrintifyPublishing(product)).toBe(expected)
+  })
+
+  it("a hidden product can complete publishing without becoming storefront eligible", () => {
+    const hidden = { ...publication, visible: false }
+    expect(isPublicationComplete(hidden)).toBe(true)
+    expect(isPrintifyPublished(hidden)).toBe(false)
+    expect(isPrintifyPublished(publication)).toBe(true)
+  })
+
+  it.each([
+    { ...publication, is_locked: true },
+    { ...publication, external: null },
+    { ...publication, external: { id: "x", handle: " " } },
+  ])("incomplete publication %p is neither complete nor published", product => {
+    expect(isPublicationComplete(product)).toBe(false)
+    expect(isPrintifyPublished(product)).toBe(false)
   })
 })
