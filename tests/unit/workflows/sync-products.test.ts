@@ -66,6 +66,16 @@ describe("syncProductsWorkflow", () => {
     expect(updateSection).toContain("variants:")
   })
 
+  it("reconciles options on update without creating global options", () => {
+    // Medusa 2.21 enforces a store-wide unique title on global options, and
+    // createProductOptions defaults to global. A direct call here re-creates
+    // the "Product option with title: …, already exists" sync failure.
+    const updateSection = source.substring(source.indexOf("// Update existing"))
+    expect(updateSection).toContain("planOptionReconciliation")
+    expect(updateSection).toContain("applyOptionReconciliation")
+    expect(updateSection).not.toContain("createProductOptions")
+  })
+
   it("imports fetchExchangeRates from currency-converter", () => {
     expect(source).toContain("fetchExchangeRates")
   })
