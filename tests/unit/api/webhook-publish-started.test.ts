@@ -334,4 +334,26 @@ describe("product publication webhook behavior", () => {
       expect(console.warn).not.toHaveBeenCalledWith(expect.stringContaining("unhandled event type"))
     }
   })
+  // Medusa's workflow.run() rethrows a serialized plain object, not an Error.
+  const serializedWorkflowError = () => ({
+    message: "Product variant sku-1 not found",
+    name: "Error",
+    stack: "Error: Product variant sku-1 not found\n    at step (sync-products.ts:1:1)",
+  })
+
+  it("logs the real message and stack when the product:updated sync fails", async () => {
+    run.mockRejectedValueOnce(serializedWorkflowError())
+    const res = await deliver("product:updated", {})
+    expect(res.sendStatus).toHaveBeenCalledWith(200)
+    const lines = (console.error as jest.Mock).mock.calls.map(([line]) => String(line))
+    expect(lines).toContain("[printify] webhook: failed to sync after product:updated: Product variant sku-1 not found")
+    expect(lines).toContain(serializedWorkflowError().stack)
+    expect(lines.join("\n")).not.toContain("[object Object]")
+  })
+
+  it("reports the real error to Printify when a pending handshake fails", async () => {
+    query.graph.mockRejectedValueOnce(serializedWorkflowError())
+    await deliver()
+    expect(client.setPublishFailed).toHaveBeenCalledWith("shop", "printify", "Product variant sku-1 not found")
+  })
 })

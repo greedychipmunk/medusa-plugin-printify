@@ -1,6 +1,7 @@
 import { createHash } from "crypto"
 import type { PrintifyApiClient, PrintifyWebhook } from "./api-client"
 import type { PrintifyModuleOptions } from "./types"
+import { errorMessage } from "../../lib/format-error"
 
 /**
  * Topics registered with Printify. Every entry must be a real Printify event
@@ -81,7 +82,7 @@ export async function registerWebhooks(
   try {
     existing = await client.getWebhooks(shopId)
   } catch (err) {
-    console.warn(`[printify] failed to list existing webhooks: ${err}`)
+    console.warn(`[printify] failed to list existing webhooks: ${errorMessage(err)}`)
     return
   }
 
@@ -114,7 +115,7 @@ export async function registerWebhooks(
       // Printify validation failure (e.g. topic not supported for the
       // shop's sales channel) previously left the shop with NO webhooks.
       counts.failed++
-      console.warn(`[printify] failed to register webhook topic "${topic}": ${err}`)
+      console.warn(`[printify] failed to register webhook topic "${topic}": ${errorMessage(err)}`)
     }
   }
 
@@ -150,7 +151,7 @@ export async function registerWebhooksWithTimeout(
       )
     }
   } catch (err) {
-    console.warn(`[printify] webhook registration failed: ${err}`)
+    console.warn(`[printify] webhook registration failed: ${errorMessage(err)}`)
   } finally {
     clearTimeout(timer)
   }

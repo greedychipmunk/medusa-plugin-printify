@@ -19,6 +19,7 @@ import {
 } from "./option-reconciler"
 import { fetchExchangeRates, type ExchangeRates } from "../utils/currency-converter"
 import { buildVariantPrices } from "../utils/build-variant-prices"
+import { errorMessage } from "../lib/format-error"
 
 type SyncProductsInput = {
   shopId: string
@@ -50,7 +51,7 @@ const fetchAllProductsStep = createStep(
           } catch (err) {
             container.resolve(ContainerRegistrationKeys.LOGGER).error(JSON.stringify({
               event: "printify.publication_verification_failed", shop_id: shopId,
-              printify_id: product.id, error: err instanceof Error ? err.message : String(err),
+              printify_id: product.id, error: errorMessage(err),
             }))
             // No verified publication evidence: preserve the list snapshot,
             // which the shared policy safely treats as private.
@@ -241,7 +242,7 @@ const createMedusaProductsStep = createStep(
         try {
           await productModuleService.updateProducts(linkedId, { status: "draft" })
         } catch (err) {
-          logger.error(`[printify] Failed to withdraw public product ${linkedId}: ${err instanceof Error ? err.message : String(err)}`)
+          logger.error(`[printify] Failed to withdraw public product ${linkedId}: ${errorMessage(err)}`)
           throw err
         }
         updated++
