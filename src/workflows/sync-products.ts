@@ -12,6 +12,11 @@ import { computeEffectiveVisibility, isPrintifyPublished, isPrintifyPublishing }
 import PrintifyModuleService from "../modules/printify/service"
 import { PrintifyProduct, PrintifyVariant, PrintifyImage, PrintifyOption } from "../modules/printify/api-client"
 import { mapPrintifyOptions } from "./option-mapper"
+import {
+  planOptionReconciliation,
+  applyOptionReconciliation,
+  type ExistingProductOption,
+} from "./option-reconciler"
 import { fetchExchangeRates, type ExchangeRates } from "../utils/currency-converter"
 import { buildVariantPrices } from "../utils/build-variant-prices"
 
@@ -384,7 +389,7 @@ const createMedusaProductsStep = createStep(
           // Build a map of existing Medusa variant IDs keyed by Printify variant ID
           // so updateProducts can match existing variants instead of trying to create duplicates
           const existingProduct = await productModuleService.retrieveProduct(medusaProductId, {
-            relations: ["variants", "options"],
+            relations: ["variants", "options", "options.values"],
           })
           const existingVariantIdMap = new Map<number, string>()
           for (const variant of existingProduct.variants ?? []) {
@@ -408,34 +413,25 @@ const createMedusaProductsStep = createStep(
           // through MikroORM's own pivot sync, which re-inserts pivot rows
           // without the `id` PK and fails with "Cannot set field 'id' of
           // Product product option to null".
-          const existingOptionsByTitle = new Map<string, string>()
-          for (const opt of existingProduct.options ?? []) {
-            existingOptionsByTitle.set(opt.title, opt.id)
-          }
-
-          // Create options Printify has that Medusa doesn't (matched by title),
-          // then build the exact target option-id set for this product.
-          const optionIdByTitle = new Map<string, string>()
-          const targetOptionIds = new Set<string>()
-          const newOptions = mapped.medusaOptions.filter(
-            (opt) => !existingOptionsByTitle.has(opt.title)
+          // Reconcile options: keep title matches, rename product-exclusive
+          // options Printify renamed, create anything new as product-exclusive
+          // (never global — see option-reconciler.ts). Then build the exact
+          // target option-id set for this product.
+          const optionPlan = planOptionReconciliation(
+            (existingProduct.options ?? []) as unknown as ExistingProductOption[],
+            mapped.medusaOptions
           )
-          if (newOptions.length > 0) {
-            const createdOptions = await productModuleService.createProductOptions(
-              newOptions.map((opt) => ({ title: opt.title, values: opt.values }))
+          for (const rename of optionPlan.renames) {
+            logger.info(
+              `[printify] Renaming option "${rename.from}" → "${rename.to}" on "${pp.title}" (${medusaProductId}) to match Printify`
             )
-            for (const opt of Array.isArray(createdOptions) ? createdOptions : [createdOptions]) {
-              optionIdByTitle.set(opt.title, opt.id)
-              targetOptionIds.add(opt.id)
-            }
           }
-          for (const opt of mapped.medusaOptions) {
-            const existingId = existingOptionsByTitle.get(opt.title)
-            if (existingId) {
-              optionIdByTitle.set(opt.title, existingId)
-              targetOptionIds.add(existingId)
-            }
-          }
+          const optionIdByTitle = await applyOptionReconciliation(productModuleService, optionPlan)
+          const targetOptionIds = new Set<string>(
+            mapped.medusaOptions
+              .map((opt) => optionIdByTitle.get(opt.title))
+              .filter((id): id is string => !!id)
+          )
 
           // Three-phase update:
           //   1. Scalar fields + option links via option_ids (set-diff based)
