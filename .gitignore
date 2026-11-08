@@ -124,7 +124,7 @@ public
 # Build outputs
 dist/
 build/
-lib/
+/lib/
 *.d.ts
 *.js.map
 

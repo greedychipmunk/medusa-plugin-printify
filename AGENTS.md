@@ -175,6 +175,19 @@ integration publications may be prepared as private Medusa drafts, then acknowle
 and re-fetched; only confirmed completion permits public display. Do not reinstate
 the old locked-product deadlock by refusing to prepare private draft records.
 
+Keep two questions separate (docs/2026-11-08_publish-handshake-hidden-products.md):
+- **Is Printify waiting on us?** `isPrintifyPublishing` = `is_locked === true`, regardless
+  of `visible`. Products hidden in Printify publish with `visible: false`; gating on
+  `visible` left them locked until Printify's 1-hour auto-unlock ("Unpublished changes").
+- **Did the request complete?** `isPublicationComplete` = unlocked + valid `external`.
+- **May the storefront show it?** `isPrintifyPublished` = complete AND `visible === true`.
+
+Every locked request must end in `publishing_succeeded` or `publishing_failed`. The
+webhook answers 200 immediately and runs the handshake in the background
+(`src/lib/publish-handshake.ts`, single-flight per product) because a full sync
+outlasts Printify's webhook timeout. The `printify-reconcile-publishing` job retries
+any still-locked product every 10 minutes.
+
 ### Module Links (`src/links/`)
 
 Links connect Printify module data to core Medusa entities without coupling the modules together. For example, linking a `PrintifyProduct` to a Medusa `Product`.

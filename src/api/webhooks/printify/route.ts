@@ -1,11 +1,10 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { IProductModuleService, MedusaContainer } from "@medusajs/framework/types"
-import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
+import { MedusaContainer } from "@medusajs/framework/types"
 import { PRINTIFY_MODULE } from "../../../modules/printify"
 import PrintifyModuleService from "../../../modules/printify/service"
 import { verifyPrintifySignature } from "../../../lib/webhook-utils"
 import { syncProductsWorkflow } from "../../../workflows/sync-products"
-import { isPrintifyPublished, isPrintifyPublishing } from "../../../workflows/visibility"
+import { draftLinkedProduct, runPublishHandshake } from "../../../lib/publish-handshake"
 
 type PrintifyWebhookBody = {
   type: string
@@ -126,19 +125,6 @@ async function handleProductEvent(
   }
 }
 
-async function draftLinkedProduct(container: MedusaContainer, printifyId: string) {
-  const query = container.resolve(ContainerRegistrationKeys.QUERY)
-  const { data } = await query.graph({
-    entity: "printify_product",
-    fields: ["product.id"],
-    filters: { printify_id: printifyId },
-  })
-  const products = container.resolve<IProductModuleService>(Modules.PRODUCT)
-  for (const row of data) {
-    if (row.product?.id) await products.updateProducts(row.product.id, { status: "draft" })
-  }
-}
-
 async function unpublishProduct(
   printifyId: string,
   service: PrintifyModuleService,
@@ -160,15 +146,18 @@ async function unpublishProduct(
 }
 
 /**
- * Prepare a PRIVATE draft, acknowledge the external id/handle, then refresh
- * confirmed upstream facts before promotion. See docs/2026-10-10_printify-publication-gate.md.
- * A refresh failure after acknowledgment is a local repair/retry, NOT a failed publication.
+ * Answer Printify immediately, then run the handshake in the background.
+ * The handshake includes a full catalog sync (~45 s), longer than Printify
+ * waits for a webhook response; answering late made Printify abandon and
+ * redeliver, stacking concurrent syncs. Failures are logged with stage
+ * context; the scheduled reconcile job retries any request still locked.
+ * See docs/2026-11-08_publish-handshake-hidden-products.md.
  */
 async function handleProductPublishStarted(
   body: PrintifyWebhookBody,
   service: PrintifyModuleService,
   container: MedusaContainer
-) {
+): Promise<void> {
   const printifyProductId = String(body.resource.id)
   const action = (body.resource.data?.action as string) ?? "create"
   if (action === "delete") {
@@ -182,101 +171,9 @@ async function handleProductPublishStarted(
     await unpublishProduct(printifyProductId, service, container)
     throw new Error(`Unsupported Printify publish action: ${action}`)
   }
-
-  let client: ReturnType<PrintifyModuleService["getApiClient"]> | undefined
-  const options = service.getOptions()
-  const shopId = body.shop_id || options.shopId
-  let stage = "prepare"
-  let pending = false
-  let acknowledged = false
-  const context = () => ({ stage, shop_id: shopId, printify_id: printifyProductId, acknowledged })
-
-  try {
-    if (!shopId) throw new Error("cannot complete publish handshake without a shop id")
-    client = service.getApiClient()
-    console.log(`[printify] webhook: ${JSON.stringify(context())}`)
-    await syncProductsWorkflow(container).run({ input: { shopId } })
-
-    stage = "verify_pending"
-    const upstream = await client.getProduct(shopId, printifyProductId)
-    await service.updatePrintifyProducts({
-      selector: { printify_id: printifyProductId },
-      data: {
-        is_published: isPrintifyPublished(upstream),
-        is_locked: upstream?.is_locked !== false,
-        printify_data: upstream && typeof upstream === "object" && !Array.isArray(upstream)
-          ? upstream as unknown as Record<string, unknown> : null,
-      },
-    })
-    pending = isPrintifyPublishing(upstream)
-    if (isPrintifyPublished(upstream)) {
-      // Only positive external publication evidence makes this a completed repeat.
-      console.log(`[printify] webhook: ${JSON.stringify({ ...context(), completed_repeat: true })}`)
-      return
-    }
-    if (!pending) {
-      // visible defaults to true; publishing_failed also unlocks. Neither proves
-      // completion without external.id/handle. Do not acknowledge unrelated requests.
-      throw new Error("Printify request is neither pending nor positively completed")
-    }
-
-    stage = "link"
-    const query = container.resolve(ContainerRegistrationKeys.QUERY)
-    const { data } = await query.graph({
-      entity: "printify_product",
-      fields: ["product.id", "product.handle"],
-      filters: { printify_id: printifyProductId },
-    })
-    const medusaProduct = data[0]?.product
-    if (!medusaProduct?.id || !medusaProduct?.handle) {
-      throw new Error("no linked Medusa product with a handle after private preparation")
-    }
-    // Defensive demotion covers stale linked products even if preparation skipped a mapping.
-    await draftLinkedProduct(container, printifyProductId)
-    const base = (options.storefrontBaseUrl ?? options.webhookBaseUrl ?? "").replace(/\/+$/, "")
-    const handle = `${base}/products/${medusaProduct.handle}`
-
-    stage = "acknowledge"
-    await client.setPublishSucceeded(shopId, printifyProductId, { id: medusaProduct.id, handle })
-    acknowledged = true
-
-    stage = "confirmed_refresh"
-    const confirmed = await client.getProduct(shopId, printifyProductId)
-    await service.updatePrintifyProducts({
-      selector: { printify_id: printifyProductId },
-      data: {
-        is_published: isPrintifyPublished(confirmed),
-        is_locked: confirmed?.is_locked !== false,
-        printify_data: confirmed && typeof confirmed === "object" && !Array.isArray(confirmed)
-          ? confirmed as unknown as Record<string, unknown> : null,
-      },
-    })
-    if (!isPrintifyPublished(confirmed)) {
-      throw new Error("Printify publication completion is not yet confirmed")
-    }
-    // The workflow re-fetches the catalog and applies the shared visibility policy,
-    // including merchant hide intent. The acknowledgment alone never promotes.
-    await syncProductsWorkflow(container).run({ input: { shopId } })
-    console.log(`[printify] webhook: ${JSON.stringify({ ...context(), handle })}`)
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err)
-    console.error(`[printify] webhook: ${JSON.stringify({ ...context(), error: reason })}`)
-    try {
-      await draftLinkedProduct(container, printifyProductId)
-    } catch (draftErr) {
-      console.error(`[printify] webhook: ${JSON.stringify({ ...context(), stage: "demote", error: String(draftErr) })}`)
-    }
-    // Never tell Printify a successful publication failed because a subsequent
-    // read/sync failed. Nor cancel an unrelated/completed request on stale delivery.
-    if (pending && !acknowledged && shopId && client) {
-      try {
-        await client.setPublishFailed(shopId, printifyProductId, reason)
-      } catch (failErr) {
-        console.error(`[printify] webhook: ${JSON.stringify({ ...context(), stage: "report_failure", error: String(failErr) })}`)
-      }
-    }
-    throw err
-  }
+  const shopId = body.shop_id ? String(body.shop_id) : service.getOptions().shopId
+  // Errors are already logged with stage context inside the handshake.
+  runPublishHandshake(container, shopId, printifyProductId).catch(() => {})
 }
 
 async function handleShopDisconnected(

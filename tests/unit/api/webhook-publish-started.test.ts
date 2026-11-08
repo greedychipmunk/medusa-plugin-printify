@@ -1,5 +1,6 @@
 import { createHmac } from "crypto"
 import { POST } from "../../../src/api/webhooks/printify/route"
+import { waitForPublishHandshakes } from "../../../src/lib/publish-handshake"
 import { WEBHOOK_TOPICS } from "../../../src/modules/printify/register-webhooks"
 import { syncProductsWorkflow } from "../../../src/workflows/sync-products"
 import { computeEffectiveVisibility, isPrintifyPublished } from "../../../src/workflows/visibility"
@@ -64,7 +65,16 @@ describe("product publication webhook behavior", () => {
     }
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn(), sendStatus: jest.fn() }
     await POST(req as any, res as any)
+    await waitForPublishHandshakes()
     return res
+  }
+
+  // Printify is answered before the handshake runs; failures surface in logs
+  // (and are retried by the reconcile job), never as a late HTTP error.
+  function expectHandshakeFailed(res: { sendStatus: jest.Mock; status: jest.Mock }) {
+    expect(res.sendStatus).toHaveBeenCalledWith(200)
+    expect(res.status).not.toHaveBeenCalled()
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('"error":'))
   }
 
   it("prepares privately, acknowledges id/handle, and promotes only after confirmed refresh", async () => {
@@ -113,7 +123,7 @@ describe("product publication webhook behavior", () => {
     expect(status).toBe("draft")
     expect(run).toHaveBeenCalledTimes(1)
     expect(client.setPublishFailed).toHaveBeenCalledWith("shop", "printify", "ack offline")
-    expect(res.status).toHaveBeenCalledWith(500)
+    expectHandshakeFailed(res)
   })
 
   it.each(["read", "sync", "still_locked"])("keeps private on post-success %s failure without reporting upstream failed", async failure => {
@@ -124,7 +134,7 @@ describe("product publication webhook behavior", () => {
     expect(client.setPublishSucceeded).toHaveBeenCalledTimes(1)
     expect(client.setPublishFailed).not.toHaveBeenCalled()
     expect(status).toBe("draft")
-    expect(res.status).toHaveBeenCalledWith(500)
+    expectHandshakeFailed(res)
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('"stage":"confirmed_refresh"'))
   })
 
@@ -136,7 +146,7 @@ describe("product publication webhook behavior", () => {
     expect(status).toBe("draft")
     expect(client.setPublishSucceeded).toHaveBeenCalledTimes(1)
     expect(client.setPublishFailed).toHaveBeenCalledTimes(1)
-    expect(retry.status).toHaveBeenCalledWith(500)
+    expectHandshakeFailed(retry)
     expect(service.updatePrintifyProducts).toHaveBeenLastCalledWith({
       selector: { printify_id: "printify" },
       data: { is_published: false, is_locked: false, printify_data: { ...remote } },
@@ -148,7 +158,7 @@ describe("product publication webhook behavior", () => {
       client.setPublishSucceeded.mockImplementation(async () => { remote.is_locked = false; remote.external = external })
       const res = await deliver()
       expect(status).toBe("draft")
-      expect(res.status).toHaveBeenCalledWith(500)
+      expectHandshakeFailed(res)
       expect(client.setPublishFailed).not.toHaveBeenCalled()
       expect(run).toHaveBeenCalledTimes(1)
     }
@@ -157,7 +167,7 @@ describe("product publication webhook behavior", () => {
   it("repairs a post-ack refresh failure on retry without acknowledging publication twice", async () => {
     client.getProduct.mockResolvedValueOnce({ ...remote }).mockRejectedValueOnce(new Error("read offline"))
     const first = await deliver()
-    expect(first.status).toHaveBeenCalledWith(500)
+    expectHandshakeFailed(first)
     expect(status).toBe("draft")
     const retry = await deliver()
     expect(status).toBe("published")
@@ -171,7 +181,7 @@ describe("product publication webhook behavior", () => {
     const res = await deliver()
     expect(status).toBe("draft")
     expect(client.setPublishSucceeded).not.toHaveBeenCalled()
-    expect(res.status).toHaveBeenCalledWith(500)
+    expectHandshakeFailed(res)
   })
 
   it("demotes on a preparation failure without canceling an unverified upstream request", async () => {
@@ -199,16 +209,73 @@ describe("product publication webhook behavior", () => {
 
   it.each([
     { visible: false, is_locked: false }, { visible: true },
-    { visible: "true", is_locked: true }, { visible: true, is_locked: "false" }, {},
+    { visible: true, is_locked: "false" }, {},
     { visible: true, is_locked: false, external: null },
     { visible: true, is_locked: false, external: { id: "medusa", handle: "" } },
   ])("fails closed for stale/invalid publication flags %p", async flags => {
     remote = flags
     const res = await deliver()
-    expect(res.status).toHaveBeenCalledWith(500)
+    expectHandshakeFailed(res)
     expect(status).toBe("draft")
     expect(client.setPublishSucceeded).not.toHaveBeenCalled()
     expect(client.setPublishFailed).not.toHaveBeenCalled()
+  })
+
+  // Regression 2026-11-08: "Software Factory Cheatsheet Desk Mat" was hidden in
+  // Printify (visible: false) and locked by a publish request. The handler
+  // refused it as "neither pending nor completed" and Printify auto-unlocked
+  // it an hour later as "Unpublished changes".
+  it.each([false, "true", undefined])("completes a locked publish request when visible is %p and keeps it off the storefront", async visible => {
+    remote = { visible, is_locked: true, external: null }
+    const res = await deliver()
+    expect(client.setPublishSucceeded).toHaveBeenCalledWith("shop", "printify", { id: "medusa", handle: "https://store.test/products/shirt" })
+    expect(client.setPublishFailed).not.toHaveBeenCalled()
+    expect(trace).toEqual(["sync", "read", "draft", "ack", "read", "sync"])
+    expect(status).toBe("draft")
+    expect(res.sendStatus).toHaveBeenCalledWith(200)
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it("treats a redelivery for a completed hidden product as a completed repeat", async () => {
+    remote = { visible: false, is_locked: false, external: { id: "medusa", handle: "https://store.test/products/shirt" } }
+    const res = await deliver()
+    expect(client.setPublishSucceeded).not.toHaveBeenCalled()
+    expect(client.setPublishFailed).not.toHaveBeenCalled()
+    expect(console.error).not.toHaveBeenCalled()
+    expect(status).toBe("draft")
+    expect(res.sendStatus).toHaveBeenCalledWith(200)
+  })
+
+  it("answers Printify before the slow handshake finishes", async () => {
+    let releaseSync: () => void = () => {}
+    run.mockImplementationOnce(() => new Promise(resolve => { releaseSync = () => resolve({ result: {} }) }))
+    const body = { type: "product:publish:started", shop_id: "shop", resource: { id: "printify", type: "product", data: { action: "create" } } }
+    const rawBody = JSON.stringify(body)
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn(), sendStatus: jest.fn() }
+    await POST({
+      body, rawBody,
+      headers: { "x-pfy-signature": createHmac("sha256", "secret").update(rawBody).digest("hex") },
+      scope: { resolve: (key: string) => ({ printify: service, query, product: products })[key] },
+    } as any, res as any)
+    expect(res.sendStatus).toHaveBeenCalledWith(200)
+    expect(client.setPublishSucceeded).not.toHaveBeenCalled()
+    releaseSync()
+    await waitForPublishHandshakes()
+    expect(client.setPublishSucceeded).toHaveBeenCalledTimes(1)
+  })
+
+  it("runs one handshake for concurrent duplicate deliveries", async () => {
+    const body = { type: "product:publish:started", shop_id: "shop", resource: { id: "printify", type: "product", data: { action: "create" } } }
+    const rawBody = JSON.stringify(body)
+    const send = () => POST({
+      body, rawBody,
+      headers: { "x-pfy-signature": createHmac("sha256", "secret").update(rawBody).digest("hex") },
+      scope: { resolve: (key: string) => ({ printify: service, query, product: products })[key] },
+    } as any, { status: jest.fn().mockReturnThis(), json: jest.fn(), sendStatus: jest.fn() } as any)
+    await Promise.all([send(), send(), send()])
+    await waitForPublishHandshakes()
+    expect(client.setPublishSucceeded).toHaveBeenCalledTimes(1)
+    expect(run).toHaveBeenCalledTimes(2)
   })
 
   it.each(["product:publish:started", "product:deleted"])("immediately drafts on %s unpublish without completing any publication request", async type => {

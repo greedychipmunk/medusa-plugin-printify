@@ -15,21 +15,30 @@ function record(value: unknown): Record<string, unknown> | null {
     ? value as Record<string, unknown> : null
 }
 
-/** Printify's `visible` defaults to true, including untouched drafts. A
- * successful publication establishes `external`; unlock alone is insufficient
- * because publishing_failed also unlocks a product. */
-export function isPrintifyPublished(value: unknown): boolean {
+/** The publish request has finished: unlocked with a valid external record.
+ * Unlock alone is insufficient because publishing_failed also unlocks a
+ * product. Says nothing about storefront visibility. */
+export function isPublicationComplete(value: unknown): boolean {
   const product = record(value)
-  if (product?.visible !== true || product?.is_locked !== false) return false
+  if (product?.is_locked !== false) return false
   const external = record(product.external)
   return typeof external?.id === "string" && external.id.trim().length > 0 &&
     typeof external?.handle === "string" && external.handle.trim().length > 0
 }
 
-/** A first publication needs a private linked record before external exists. */
+/** Storefront eligibility: a completed publication that Printify also marks
+ * visible. Printify's `visible` defaults to true, including untouched drafts,
+ * so it is never publication evidence on its own. */
+export function isPrintifyPublished(value: unknown): boolean {
+  return record(value)?.visible === true && isPublicationComplete(value)
+}
+
+/** Printify is waiting for this integration to answer a publish request.
+ * The lock is the authoritative signal; `visible` is irrelevant here because
+ * products hidden in Printify are published (locked) with `visible: false`.
+ * See docs/2026-11-08_publish-handshake-hidden-products.md. */
 export function isPrintifyPublishing(value: unknown): boolean {
-  const product = record(value)
-  return product?.visible === true && product?.is_locked === true
+  return record(value)?.is_locked === true
 }
 
 export function computeEffectiveVisibility(pp: {
