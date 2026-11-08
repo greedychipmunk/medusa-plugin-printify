@@ -4,6 +4,7 @@ import { IProductModuleService } from "@medusajs/types"
 import { PRINTIFY_MODULE } from "../../../../../modules/printify"
 import PrintifyModuleService from "../../../../../modules/printify/service"
 import { computeEffectiveVisibility, isPrintifyPublished } from "../../../../../workflows/visibility"
+import { errorMessage } from "../../../../../lib/format-error"
 
 // GET /admin/printify/products/:id — get a single product with Medusa link
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -47,7 +48,7 @@ export async function PATCH(req: MedusaRequest, res: MedusaResponse) {
     product_id: req.params.id,
     requested_visibility: show,
     stage,
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMessage(error),
   }))
 
   let existingProduct: Awaited<ReturnType<PrintifyModuleService["retrievePrintifyProduct"]>>

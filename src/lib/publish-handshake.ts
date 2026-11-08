@@ -4,6 +4,7 @@ import { PRINTIFY_MODULE } from "../modules/printify"
 import PrintifyModuleService from "../modules/printify/service"
 import { syncProductsWorkflow } from "../workflows/sync-products"
 import { isPrintifyPublished, isPrintifyPublishing, isPublicationComplete } from "../workflows/visibility"
+import { errorMessage } from "./format-error"
 
 /**
  * Custom-integration publish handshake, shared by the webhook, the scheduled
@@ -127,12 +128,12 @@ export async function completePublishHandshake(
     })}`)
     return "acknowledged"
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err)
+    const reason = errorMessage(err)
     log("error", `${tag}: ${JSON.stringify({ ...context(), error: reason })}`)
     try {
       await draftLinkedProduct(container, printifyProductId)
     } catch (draftErr) {
-      log("error", `${tag}: ${JSON.stringify({ ...context(), stage: "demote", error: String(draftErr) })}`)
+      log("error", `${tag}: ${JSON.stringify({ ...context(), stage: "demote", error: errorMessage(draftErr) })}`)
     }
     // Never tell Printify a successful publication failed because a subsequent
     // read/sync failed. Nor cancel an unrelated/completed request on stale delivery.
@@ -140,7 +141,7 @@ export async function completePublishHandshake(
       try {
         await client.setPublishFailed(shopId, printifyProductId, reason)
       } catch (failErr) {
-        log("error", `${tag}: ${JSON.stringify({ ...context(), stage: "report_failure", error: String(failErr) })}`)
+        log("error", `${tag}: ${JSON.stringify({ ...context(), stage: "report_failure", error: errorMessage(failErr) })}`)
       }
     }
     throw new PublishHandshakeError(reason, stage, acknowledged)

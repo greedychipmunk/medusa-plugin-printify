@@ -5,6 +5,7 @@ import PrintifyModuleService from "../../../modules/printify/service"
 import { verifyPrintifySignature } from "../../../lib/webhook-utils"
 import { syncProductsWorkflow } from "../../../workflows/sync-products"
 import { draftLinkedProduct, runPublishHandshake } from "../../../lib/publish-handshake"
+import { errorMessage, errorStack } from "../../../lib/format-error"
 
 type PrintifyWebhookBody = {
   type: string
@@ -121,7 +122,9 @@ async function handleProductEvent(
       input: { shopId: body.shop_id },
     })
   } catch (err) {
-    console.error(`[printify] webhook: failed to sync after product:updated: ${err}`)
+    console.error(`[printify] webhook: failed to sync after product:updated: ${errorMessage(err)}`)
+    const stack = errorStack(err)
+    if (stack) console.error(stack)
   }
 }
 
@@ -140,7 +143,7 @@ async function unpublishProduct(
     })
     console.log(`[printify] webhook: ${JSON.stringify({ stage: "unpublish", printify_id: printifyId })}`)
   } catch (err) {
-    console.error(`[printify] webhook: ${JSON.stringify({ stage: "unpublish", printify_id: printifyId, error: String(err) })}`)
+    console.error(`[printify] webhook: ${JSON.stringify({ stage: "unpublish", printify_id: printifyId, error: errorMessage(err) })}`)
     throw err
   }
 }

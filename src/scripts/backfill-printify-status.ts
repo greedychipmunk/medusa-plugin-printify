@@ -11,6 +11,7 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import { PRINTIFY_MODULE } from "../modules/printify"
 import PrintifyModuleService from "../modules/printify/service"
 import { computeEffectiveVisibility, isPrintifyPublished } from "../workflows/visibility"
+import { errorMessage } from "../lib/format-error"
 
 export type ProductStatus = "draft" | "proposed" | "published" | "rejected"
 
@@ -67,7 +68,7 @@ export default async function backfillPrintifyStatus({ container }: ExecArgs) {
     } catch (err) {
       failed++
       facts = { is_published: false, is_locked: true, printify_data: null }
-      logger.error(`[backfill] ${JSON.stringify({ ...context(), error: String(err) })}`)
+      logger.error(`[backfill] ${JSON.stringify({ ...context(), error: errorMessage(err) })}`)
     }
 
     try {
@@ -97,7 +98,7 @@ export default async function backfillPrintifyStatus({ container }: ExecArgs) {
       logger.info(`[backfill] ${JSON.stringify({ ...context(), product_id: linked.id, status: target })}`)
     } catch (err) {
       failed++
-      logger.error(`[backfill] ${JSON.stringify({ ...context(), error: String(err) })}`)
+      logger.error(`[backfill] ${JSON.stringify({ ...context(), error: errorMessage(err) })}`)
     }
   }
   logger.info(`[backfill] summary: drafted=${drafted} published=${published} unchanged=${unchanged} unlinked=${unlinked} failed=${failed}`)
