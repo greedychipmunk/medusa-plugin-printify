@@ -35,9 +35,9 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   try {
     switch (body.type) {
-      case "order:status-changed":
+      case "order:updated":
       case "order:sent-to-production":
-      case "order:shipped":
+      case "order:shipment:created":
       case "order:shipment:delivered":
         await handleOrderEvent(body, service)
         break
@@ -66,15 +66,36 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
 }
 
+/**
+ * Local status written for each Printify order event. `order:updated` carries
+ * Printify's own order status (e.g. "in-production", "fulfilled") in
+ * `resource.data.status`; the other events carry no status, so they map to a
+ * fixed value. Event names and payloads: developers.printify.com "Events".
+ */
+const ORDER_EVENT_STATUS: Record<string, string | undefined> = {
+  "order:updated": undefined, // from payload
+  "order:sent-to-production": "sent-to-production",
+  "order:shipment:created": "shipped",
+  "order:shipment:delivered": "delivered",
+}
+
 async function handleOrderEvent(
   body: PrintifyWebhookBody,
   service: PrintifyModuleService
 ) {
   const printifyOrderId = String(body.resource.id)
+  const payloadStatus = body.resource.data?.status
   const status =
-    (body.resource.data?.status as string) ??
-    body.type.split(":").pop() ??
-    "unknown"
+    body.type === "order:updated"
+      ? typeof payloadStatus === "string" && payloadStatus
+        ? payloadStatus
+        : undefined
+      : ORDER_EVENT_STATUS[body.type]
+
+  if (!status) {
+    console.warn(`[printify] webhook: ${body.type} for order ${printifyOrderId} has no status; ignoring`)
+    return
+  }
 
   const orders = await service.listPrintifyOrders({ printify_id: printifyOrderId })
   if (orders.length > 0) {

@@ -125,14 +125,23 @@ Admin routes are automatically authenticated. Storefront routes under `src/api/s
 
 Printify sends webhook events to a single endpoint (e.g. `POST /webhooks/printify`). The handler verifies the HMAC signature using `timingSafeEqual` and routes to the appropriate logic based on event type.
 
-**Handled event types:**
-- `order:status-changed`
-- `order:shipped`
-- `order:sent-to-production`
-- `order:shipment:delivered`
-- `product:updated`
-- `product:deleted`
+**Handled event types** (all real Printify topic names — unknown names are
+rejected at registration with 9004 "Webhook validation failed"):
+- `order:updated` → local status from `resource.data.status`
+- `order:sent-to-production` → `sent-to-production`
+- `order:shipment:created` → `shipped`
+- `order:shipment:delivered` → `delivered`
+- `product:updated`, `product:deleted`
+- `product:publish:started`
 - `shop:disconnected`
+
+**Registration** runs at boot from the module's `__hooks.onApplicationStart`
+(Medusa v2 has no `app.started` event). Printify contract details that matter:
+GET webhooks never returns `secret`, so the registered URL carries a secret
+fingerprint (`/webhooks/printify?k=<sha256(secret)[:12]>`) and any webhook for
+this endpoint with a different URL is replaced; DELETE requires
+`?host=<webhook host>`. Verify vendor API contracts against the docs —
+mocked-client unit tests cannot catch these.
 
 > **Important:** Always check `signature.length !== expected.length` before calling `timingSafeEqual` — mismatched buffer sizes throw a `RangeError`.
 

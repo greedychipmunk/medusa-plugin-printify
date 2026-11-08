@@ -8,7 +8,9 @@ import type { PrintifyModuleOptions } from "./types"
  * error 9004 "Webhook validation failed".
  */
 export const WEBHOOK_TOPICS = [
+  "order:updated",
   "order:sent-to-production",
+  "order:shipment:created",
   "order:shipment:delivered",
   "product:updated",
   "product:deleted",
