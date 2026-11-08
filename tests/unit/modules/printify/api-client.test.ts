@@ -199,11 +199,13 @@ describe("PrintifyApiClient", () => {
     })
   })
 
-  it("deleteWebhook calls delete endpoint", async () => {
+  it("deleteWebhook passes the required host query parameter", async () => {
     const client = new PrintifyApiClient("key")
     mockDelete.mockResolvedValue({ data: {} })
-    const result = await client.deleteWebhook("shop1", "wh1")
-    expect(mockDelete).toHaveBeenCalledWith("/shops/shop1/webhooks/wh1.json")
+    const result = await client.deleteWebhook("shop1", "wh1", "store.com")
+    expect(mockDelete).toHaveBeenCalledWith("/shops/shop1/webhooks/wh1.json", {
+      params: { host: "store.com" },
+    })
     expect(result).toBeUndefined()
   })
 })

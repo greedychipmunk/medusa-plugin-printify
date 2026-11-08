@@ -96,12 +96,16 @@ export type PrintifyOrder = {
   shipments?: PrintifyShipment[]
 }
 
+/**
+ * Webhook as returned by GET /shops/{shop_id}/webhooks.json. Printify never
+ * returns the signing secret on reads, so whether a webhook is signed cannot
+ * be determined from this shape.
+ */
 export type PrintifyWebhook = {
   id: string
   topic: string
   url: string
   shop_id: string
-  secret: string
 }
 
 export class PrintifyApiClient {
@@ -195,7 +199,13 @@ export class PrintifyApiClient {
     return data
   }
 
-  async deleteWebhook(shopId: string, webhookId: string): Promise<void> {
-    await this.client.delete(`/shops/${shopId}/webhooks/${webhookId}.json`)
+  /**
+   * Printify requires `host` to match the host of the webhook's URL; without
+   * it the API returns 400 "You must provide the host query parameter."
+   */
+  async deleteWebhook(shopId: string, webhookId: string, host: string): Promise<void> {
+    await this.client.delete(`/shops/${shopId}/webhooks/${webhookId}.json`, {
+      params: { host },
+    })
   }
 }
