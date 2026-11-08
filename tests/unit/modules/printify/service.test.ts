@@ -94,9 +94,13 @@ describe("PrintifyModuleService", () => {
       expect(typeof service.__hooks?.onApplicationStart).toBe("function")
     })
 
-    it("registers signed webhooks when the hook runs", async () => {
+    it("replaces a legacy webhook over the real Printify HTTP shape when the hook runs", async () => {
+      // Shapes match the live Printify API: GET returns no `secret`, and
+      // DELETE requires ?host= matching the webhook URL's host.
       jest.spyOn(console, "log").mockImplementation(() => {})
-      const get = jest.fn().mockResolvedValue({ data: [{ id: "old", topic: "order:shipped", secret: "" }] })
+      const get = jest.fn().mockResolvedValue({
+        data: [{ id: "old", topic: "product:updated", url: "https://example.com/webhooks/printify", shop_id: "shop1" }],
+      })
       const post = jest.fn().mockResolvedValue({ data: {} })
       const del = jest.fn().mockResolvedValue({ data: {} })
       ;(axios.create as jest.Mock).mockReturnValue({
@@ -117,12 +121,14 @@ describe("PrintifyModuleService", () => {
       await service.__hooks!.onApplicationStart!()
 
       expect(get).toHaveBeenCalledWith("/shops/shop1/webhooks.json")
-      expect(del).toHaveBeenCalledWith("/shops/shop1/webhooks/old.json")
+      expect(del).toHaveBeenCalledWith("/shops/shop1/webhooks/old.json", {
+        params: { host: "example.com" },
+      })
       expect(post).toHaveBeenCalledWith(
         "/shops/shop1/webhooks.json",
         expect.objectContaining({
-          topic: "order:shipped",
-          url: "https://example.com/webhooks/printify",
+          topic: "product:updated",
+          url: "https://example.com/webhooks/printify?k=7e35aaaea6b8",
           secret: "sekrit",
         })
       )
