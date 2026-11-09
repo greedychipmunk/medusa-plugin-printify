@@ -162,4 +162,52 @@ describe("authoritative publication sync callbacks", () => {
     expect(result.output).toEqual([list])
     expect(logger.error).toHaveBeenCalled()
   })
+  describe("primary mockup thumbnail", () => {
+    // Printify flags one is_default image per color; the first is the primary mockup.
+    const mockups = [
+      { src: "https://img.test/back.png", position: "back", is_default: false, variant_ids: [1] },
+      { src: "https://img.test/primary.png", position: "front", is_default: true, variant_ids: [1] },
+      { src: "https://img.test/other-color.png", position: "front", is_default: true, variant_ids: [2] },
+    ]
+    const servicesFor = (row: ReturnType<typeof fixture>, linked: boolean, variantPrices = true) => ({
+      printify: { listPrintifyProducts: jest.fn().mockResolvedValue([row]), listPrintifyShops: jest.fn().mockResolvedValue([{ sales_channel_id: "sc1" }]) },
+      [ContainerRegistrationKeys.QUERY]: { graph: jest.fn().mockResolvedValue({ data: linked ? [{ product: { id: "medusa_1" } }] : [] }) },
+      [ContainerRegistrationKeys.LINK]: { create: jest.fn().mockResolvedValue({}) },
+      [ContainerRegistrationKeys.LOGGER]: logger,
+      [Modules.PRODUCT]: {
+        updateProducts: jest.fn().mockResolvedValue({}),
+        retrieveProduct: jest.fn().mockResolvedValue({ images: [], variants: [], options: [{ id: "opt1", title: "Size" }] }),
+        updateProductOptionValuesOnProduct: jest.fn().mockResolvedValue({}),
+      },
+      [Modules.FULFILLMENT]: { listShippingProfiles: jest.fn().mockResolvedValue([{ id: "sp1" }]) },
+      [Modules.REGION]: { listRegions: jest.fn().mockResolvedValue(variantPrices ? [{ currency_code: "usd" }] : []) },
+    })
+
+    beforeEach(() => {
+      jest.mocked(createProductsWorkflow).mockReturnValue({ run: jest.fn().mockResolvedValue({ result: [{ id: "medusa_1" }] }) } as never)
+      jest.mocked(updateProductsWorkflow).mockReturnValue({ run: jest.fn().mockResolvedValue({}) } as never)
+    })
+    const productInputs = (wf: unknown) =>
+      (jest.mocked(wf as jest.Mock).mock.results as { value: { run: jest.Mock } }[])
+        .flatMap(r => r.value.run.mock.calls.map(c => c[0].input.products[0]))
+
+    it("sets the first is_default mockup as the thumbnail on create", async () => {
+      await runStep(mirrorStep, { shopId: "shop1" }, servicesFor({ ...fixture(), images: mockups } as never, false))
+      expect(productInputs(createProductsWorkflow)[0].thumbnail).toBe("https://img.test/primary.png")
+    })
+
+    it("re-asserts the primary mockup on every update so stale thumbnails are repaired", async () => {
+      await runStep(mirrorStep, { shopId: "shop1" }, servicesFor({ ...fixture(), images: mockups } as never, true))
+      const inputs = productInputs(updateProductsWorkflow).filter(p => "images" in p)
+      expect(inputs.length).toBeGreaterThan(0)
+      for (const input of inputs) expect(input.thumbnail).toBe("https://img.test/primary.png")
+    })
+
+    it("clears the thumbnail when a linked product has no images", async () => {
+      await runStep(mirrorStep, { shopId: "shop1" }, servicesFor({ ...fixture(), images: [] }, true))
+      const inputs = productInputs(updateProductsWorkflow).filter(p => "images" in p)
+      expect(inputs.length).toBeGreaterThan(0)
+      for (const input of inputs) expect(input.thumbnail).toBeNull()
+    })
+  })
 })
