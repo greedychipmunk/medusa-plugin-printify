@@ -12,6 +12,7 @@ import { computeEffectiveVisibility, isPrintifyPublished, isPrintifyPublishing }
 import PrintifyModuleService from "../modules/printify/service"
 import { PrintifyProduct, PrintifyVariant, PrintifyImage, PrintifyOption } from "../modules/printify/api-client"
 import { mapPrintifyOptions } from "./option-mapper"
+import { selectPrimaryImage } from "./primary-image"
 import {
   planOptionReconciliation,
   applyOptionReconciliation,
@@ -360,6 +361,7 @@ const createMedusaProductsStep = createStep(
                   handle: slugify(pp.title),
                   status: targetStatus,
                   images: printifyImages.map((img) => ({ url: img.src })),
+                  thumbnail: selectPrimaryImage(printifyImages) ?? undefined,
                   options: mapped.medusaOptions,
                   variants: buildMedusaVariants(enabledVariants, mapped, pp.printify_id, activeCurrencies, rates),
                   sales_channels: [{ id: salesChannelId }],
@@ -452,6 +454,7 @@ const createMedusaProductsStep = createStep(
                     description: pp.description || undefined,
                     status: targetStatus as any,
                     images: printifyImages.map((img) => ({ url: img.src })),
+                    thumbnail: selectPrimaryImage(printifyImages),
                     sales_channels: [{ id: salesChannelId }],
                     option_ids: [...targetOptionIds],
                   } as any,
@@ -503,6 +506,7 @@ const createMedusaProductsStep = createStep(
                     description: pp.description || undefined,
                     status: targetStatus as any,
                     images: printifyImages.map((img) => ({ url: img.src })),
+                    thumbnail: selectPrimaryImage(printifyImages),
                     sales_channels: [{ id: salesChannelId }],
                   },
                 ],
